@@ -86,7 +86,7 @@ public:
         return topK;
     }
 
-    int detect(InputArray input_image, OutputArray faces) override
+    int detect(InputArray input_image, CV_OUT std::vector<Mat> faces) override
     {
         // TODO: more checkings should be done?
         if (input_image.empty())
@@ -105,8 +105,8 @@ public:
         net.forward(output_blobs, output_names);
 
         // Post process
-        Mat results = postProcess(output_blobs);
-        results.convertTo(faces, CV_32FC1);
+        postProcess(output_blobs, faces);
+        // results.convertTo(faces, CV_32FC1);
         return 1;
     }
 private:
@@ -171,7 +171,7 @@ private:
         }
     }
 
-    Mat postProcess(const std::vector<Mat>& output_blobs)
+    void postProcess(const std::vector<Mat>& output_blobs, std::vector<Mat>& faces)
     {
         // Extract from output_blobs
         Mat loc = output_blobs[0];
@@ -183,7 +183,7 @@ private:
         float* loc_v = (float*)(loc.data);
         float* conf_v = (float*)(conf.data);
         float* iou_v = (float*)(iou.data);
-        Mat faces;
+        std::vector<Mat> faces_tmp;
         // (tl_x, tl_y, w, h, re_x, re_y, le_x, le_y, nt_x, nt_y, rcm_x, rcm_y, lcm_x, lcm_y, score)
         // 'tl': top left point of the bounding box
         // 're': right eye, 'le': left eye
@@ -228,37 +228,38 @@ private:
             face.at<float>(0, 12) = (priors[i].x + loc_v[i*14+12] * variance[0] * priors[i].width)  * inputW; // left corner of mouth, x
             face.at<float>(0, 13) = (priors[i].y + loc_v[i*14+13] * variance[0] * priors[i].height) * inputH; // left corner of mouth, y
 
-            faces.push_back(face);
+            faces_tmp.push_back(face);
         }
 
-        if (faces.rows > 1)
+        if (faces_tmp.size() > 1)
         {
             // Retrieve boxes and scores
             std::vector<Rect2i> faceBoxes;
             std::vector<float> faceScores;
-            for (int rIdx = 0; rIdx < faces.rows; rIdx++)
+            for (size_t rIdx = 0; rIdx < faces_tmp.size(); rIdx++)
             {
-                faceBoxes.push_back(Rect2i(int(faces.at<float>(rIdx, 0)),
-                                           int(faces.at<float>(rIdx, 1)),
-                                           int(faces.at<float>(rIdx, 2)),
-                                           int(faces.at<float>(rIdx, 3))));
-                faceScores.push_back(faces.at<float>(rIdx, 14));
+                faceBoxes.push_back(Rect2i(int(faces_tmp[rIdx].at<float>(0)),
+                                           int(faces_tmp[rIdx].at<float>(1)),
+                                           int(faces_tmp[rIdx].at<float>(2)),
+                                           int(faces_tmp[rIdx].at<float>(3))));
+                faceScores.push_back(faces_tmp[rIdx].at<float>(14));
             }
 
             std::vector<int> keepIdx;
             dnn::NMSBoxes(faceBoxes, faceScores, scoreThreshold, nmsThreshold, keepIdx, 1.f, topK);
 
             // Get NMS results
-            Mat nms_faces;
+            // Mat nms_faces;
             for (int idx: keepIdx)
             {
-                nms_faces.push_back(faces.row(idx));
+                faces.push_back(faces_tmp[idx]);
             }
-            return nms_faces;
+            // return nms_faces;
         }
         else
         {
-            return faces;
+            // return faces;
+            faces = faces_tmp;
         }
     }
 private:

@@ -57,7 +57,7 @@ public:
      *  @param image an image to detect
      *  @param faces detection results stored in a cv::Mat
      */
-    CV_WRAP virtual int detect(InputArray image, OutputArray faces) = 0;
+    CV_WRAP virtual int detect(InputArray image, CV_OUT std::vector<Mat> faces) = 0;
 
     /** @brief Creates an instance of this class with given parameters
      *

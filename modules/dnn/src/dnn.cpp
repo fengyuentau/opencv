@@ -46,6 +46,7 @@
 #include "op_vkcom.hpp"
 #include "op_cuda.hpp"
 #include "op_webnn.hpp"
+#include "op_timvx.hpp"
 
 #ifdef HAVE_CUDA
 #include "cuda4dnn/init.hpp"
@@ -254,6 +255,14 @@ private:
             backends.push_back(std::make_pair(DNN_BACKEND_CUDA, DNN_TARGET_CUDA_FP16));
         }
 #endif
+
+#ifdef HAVE_TIMVX
+        if(haveTimVX())
+        {
+            backends.push_back(std::make_pair(DNN_BACKEND_TIMVX, DNN_TARGET_NPU));
+        }
+#endif
+
     }
 
     BackendsList backends;
@@ -1164,6 +1173,13 @@ static Ptr<BackendWrapper> wrapMat(int backendId, int targetId, cv::Mat& m)
         }
 #endif
     }
+    else if (backendId == DNN_BACKEND_TIMVX)
+    {
+        CV_Assert(haveTimVX());
+#ifdef HAVE_TIMVX
+        return Ptr<BackendWrapper>(new TimVXBackendWrapper(m));
+#endif  // HAVE_TIMVX
+    }
     else
         CV_Error(Error::StsNotImplemented, "Unknown backend identifier");
     return Ptr<BackendWrapper>();  // TODO Error?
@@ -1247,6 +1263,11 @@ struct Net::Impl : public detail::NetImplBase
     std::unique_ptr<CudaInfo_t> cudaInfo;
 #endif
 
+#ifdef HAVE_TIMVX
+    // Create timVxInfo for reserve tvGraphList.
+    TimVXInfo timVxInfo = TimVXInfo();
+#endif
+
     Ptr<BackendWrapper> wrap(Mat& host)
     {
         if (preferableBackend == DNN_BACKEND_OPENCV && preferableTarget == DNN_TARGET_CPU)
@@ -1310,6 +1331,12 @@ struct Net::Impl : public detail::NetImplBase
                     CV_Assert(IS_DNN_CUDA_TARGET(preferableTarget));
                 }
 #endif
+            }
+            else if (preferableBackend == DNN_BACKEND_TIMVX)
+            {
+  #ifdef HAVE_TIMVX
+                return Ptr<BackendWrapper>(new TimVXBackendWrapper(baseBuffer, host));
+  #endif
             }
             else
                 CV_Error(Error::StsNotImplemented, "Unknown backend identifier");
@@ -1442,6 +1469,10 @@ struct Net::Impl : public detail::NetImplBase
                   preferableTarget == DNN_TARGET_VULKAN);
         CV_Assert(preferableBackend != DNN_BACKEND_CUDA ||
                   IS_DNN_CUDA_TARGET(preferableTarget));
+
+        CV_Assert(preferableBackend != DNN_BACKEND_TIMVX ||
+                  preferableTarget == DNN_TARGET_NPU);
+
         if (!netWasAllocated || this->blobsToKeep != blobsToKeep_)
         {
             if (preferableBackend == DNN_BACKEND_OPENCV && IS_DNN_OPENCL_TARGET(preferableTarget))
@@ -1472,6 +1503,12 @@ struct Net::Impl : public detail::NetImplBase
             }
 #endif
             if (preferableBackend == DNN_BACKEND_VKCOM && !haveVulkan())
+            {
+                preferableBackend = DNN_BACKEND_OPENCV;
+                preferableTarget = DNN_TARGET_CPU;
+            }
+
+            if (preferableBackend == DNN_BACKEND_TIMVX && !haveTimVX())
             {
                 preferableBackend = DNN_BACKEND_OPENCV;
                 preferableTarget = DNN_TARGET_CPU;
@@ -1674,6 +1711,8 @@ struct Net::Impl : public detail::NetImplBase
             initVkComBackend();
         else if (preferableBackend == DNN_BACKEND_CUDA)
             initCUDABackend(blobsToKeep_);
+        else if (preferableBackend == DNN_BACKEND_TIMVX)
+            initTimVXBackend();
         else
             CV_Error(Error::StsNotImplemented, "Unknown backend identifier");
     }
@@ -2775,6 +2814,260 @@ struct Net::Impl : public detail::NetImplBase
 #endif
     }
 
+#ifdef HAVE_TIMVX
+    // update all comsumer
+    void tvUpdateConfictMap(int graphIndex, LayerData& ld, std::vector<std::vector<int> >& graphConflictMap)
+    {
+        if(ld.consumers.empty())
+            return;
+        for(int i = 0; i < ld.consumers.size(); i++)
+        {
+            LayerData &consumerld = layers[ld.consumers[i].lid];
+            std::vector<int>::iterator it = std::find(graphConflictMap[ld.consumers[i].lid].begin(),
+                                                      graphConflictMap[ld.consumers[i].lid].end(), graphIndex);
+
+            if(it == graphConflictMap[ld.consumers[i].lid].end())
+            {
+                graphConflictMap[ld.consumers[i].lid].push_back(graphIndex);
+                tvUpdateConfictMap(graphIndex, consumerld, graphConflictMap);
+            }
+            else
+                continue;
+        }
+    }
+
+    // Convert TRANSIENT to OUTPUT
+    void tvConvertToOutputNode(const LayerData& ld, Ptr<TimVXBackendWrapper>& targetWrap)
+    {
+        // find right layer.
+        for(auto& inputLayerId : ld.inputLayersId)
+        {
+            LayerData &inputld = layers[inputLayerId];
+            auto itWrap = std::find(inputld.outputBlobsWrappers.begin(),
+                                    inputld.outputBlobsWrappers.end(), targetWrap);
+            if(itWrap != inputld.outputBlobsWrappers.end())
+            {
+                auto outputWrap = (*itWrap).dynamicCast<TimVXBackendWrapper>();
+                if (!outputWrap->isTensor())
+                    continue;
+                auto inputNode = inputld.backendNodes[DNN_BACKEND_TIMVX].dynamicCast<TimVXBackendNode>();
+                if (!inputNode->isLast && inputNode->opIndex != -1)
+                {
+                    CV_Assert(outputWrap->getTensorAttr() == tim::vx::TRANSIENT);
+                    // set last
+                    inputNode->isLast = true;
+
+                    auto shapeType = getShapeTypeFromMat(outputWrap->getMat());
+                    auto outQuant = outputWrap->getTensorQuantization();
+
+                    outputWrap->setTensorShape(shapeType);
+                    outputWrap->createTensor(inputNode->tvGraph->graph,
+                                             tim::vx::TensorAttribute::OUTPUT, outQuant);
+                    int outIndex = inputNode->tvGraph->addWrapper(outputWrap);
+                    inputNode->outputIndexList.clear();
+                    inputNode->outputIndexList.push_back(outIndex);
+                }
+            }
+        }
+    }
+#endif
+
+    void initTimVXBackend()
+    {
+        CV_TRACE_FUNCTION();
+        CV_Assert(preferableBackend == DNN_BACKEND_TIMVX);
+#ifdef HAVE_TIMVX
+        // Build TimVX Graph from sets of layers that support this TimVX backend. 
+        // Split a whole model on several TimVX Graph if some of layers are not implemented by TimVX backend.
+        if (!haveTimVX())
+            return;
+
+        // Allocate graphConflictMap
+        if(timVxInfo.graphConflictMap.empty())
+            timVxInfo.graphConflictMap.resize(layers.size());
+
+        auto it = layers.begin();
+        bool isLast = false; // If the node is the last node in current tvGraph.
+
+        for (; it != layers.end(); it++)
+        {
+            isLast = false;
+            LayerData &ld = it->second;
+            if(ld.skip)
+                continue;
+            Ptr<Layer> layer = ld.layerInstance;
+            if (!layer->supportBackend(preferableBackend))
+            {
+                continue;
+            }
+
+            // If layer consumers are more than one, set isLast true.
+            // For now, TimVX backend divides multiple branchs into multiple tvGraph.
+            if(ld.consumers.size() == 0)
+            {
+                isLast = true;
+            }
+            else if(ld.consumers.size() == 1)
+            {
+                LayerData* consumerld = &layers[ld.consumers[0].lid];
+
+                while (consumerld)
+                {
+                    if(consumerld->skip)
+                    {
+                        if(consumerld->consumers.size() == 1)
+                        {
+                            int nextLayerId = consumerld->consumers[0].lid;
+                            consumerld = &layers[nextLayerId];
+                        } else
+                        {
+                            isLast = true;
+                            break;
+                        }
+                    } else
+                    {
+                        break;
+                    }
+                }
+                Ptr<Layer>& consumerLayer = consumerld->layerInstance;
+
+                if(!isLast && !consumerLayer->supportBackend(preferableBackend))
+                {
+                    isLast = true;
+                }
+            } else
+            {
+                // If there are is multiple input, and only one of them is supported.
+                int tvSupportNum = 0;
+                for(int i = 0; i<ld.consumers.size(); i++)
+                {
+                    LayerData* consumerld = &layers[ld.consumers[0].lid];
+
+                    while (consumerld)
+                    {
+                        if(consumerld->skip)
+                        {
+                            if(consumerld->consumers.size() == 1)
+                            {
+                                int nextLayerId = consumerld->consumers[0].lid;
+                                consumerld = &layers[nextLayerId];
+                            } else
+                            {
+                                isLast = true;
+                                break;
+                            }
+                        } else
+                        {
+                            break;
+                        }
+                    }
+                    Ptr<Layer>& consumerLayer = consumerld->layerInstance;
+
+                    if(consumerLayer->supportBackend(preferableBackend))
+                    {
+                        tvSupportNum++;
+                    }
+                }
+
+                if(tvSupportNum != 1)
+                    isLast = true;
+            }
+
+            int graphIndex = -1;
+            bool needRecorrect = !timVxInfo.findGraphIndex(ld.inputBlobsWrappers, graphIndex);
+
+            if(graphIndex != -1 && !needRecorrect)
+            {
+                needRecorrect = timVxInfo.isConflict(ld.id, graphIndex);
+            }
+
+            // Recorrect the input layer.
+            if(needRecorrect)
+            {
+                // set all inputLayers' as last layer, and convert TRANSIENT to output.
+                for(int i = 0; i < ld.inputBlobsWrappers.size(); i++)
+                {
+                    auto inputWrap = ld.inputBlobsWrappers[i];
+                    auto tvInputWrap = inputWrap.dynamicCast<TimVXBackendWrapper>();
+                    if(!tvInputWrap->isTensor())
+                        continue;
+
+                    auto attr = tvInputWrap->getTensorAttr();
+                    if(attr == tim::vx::TensorAttribute::OUTPUT)
+                    {
+                        continue;
+                    } else if(attr == tim::vx::TensorAttribute::INPUT)
+                    {
+                        Mat matTmp = tvInputWrap->getMat();
+                        tvInputWrap = Ptr<TimVXBackendWrapper>(new TimVXBackendWrapper(matTmp));
+
+                    } else if(attr == tim::vx::TensorAttribute::TRANSIENT)
+                    {
+                        tvConvertToOutputNode(ld, tvInputWrap);
+                        // updateConflictMap
+                        tvUpdateConfictMap(graphIndex, ld, timVxInfo.graphConflictMap);
+                    }
+                }
+                graphIndex = -1;
+            }
+
+            if(graphIndex == -1)
+            {
+                graphIndex = timVxInfo.createGraph();
+            }
+            timVxInfo.setTmpGraphIndex(graphIndex);
+
+            ld.backendNodes[DNN_BACKEND_TIMVX] =
+                    layer->initTimVX(&timVxInfo, ld.inputBlobsWrappers, ld.outputBlobsWrappers, isLast);
+
+            // post process, create last node correctly.
+            if(isLast && ld.backendNodes[DNN_BACKEND_TIMVX])
+            {
+                auto tmpNode = ld.backendNodes[DNN_BACKEND_TIMVX].dynamicCast<TimVXBackendNode>();
+                tmpNode->isLast = true;
+                // update graphConflictMap
+                tvUpdateConfictMap(graphIndex, ld, timVxInfo.graphConflictMap);
+            }
+
+            // post process for failing to create timvx Node.
+            if(!ld.backendNodes[DNN_BACKEND_TIMVX])
+            {
+                for(int i = 0; i < ld.inputBlobsWrappers.size(); i++)
+                {
+                    auto inputWrap = ld.inputBlobsWrappers[i];
+                    auto tvInputWrap = inputWrap.dynamicCast<TimVXBackendWrapper>();
+                    if(!tvInputWrap->isTensor())
+                        continue;
+
+                    auto attr = tvInputWrap->getTensorAttr();
+                    if(attr == tim::vx::TensorAttribute::TRANSIENT)
+                    {
+                        tvConvertToOutputNode(ld, tvInputWrap);
+                    }
+                }
+            }
+        }
+
+        // Op Binding
+        it = layers.begin();
+        Ptr<TimVXBackendNode> node;
+        std::vector<Ptr<TimVXGraph> > tmpGrapList;
+        for (; it != layers.end(); it++)
+        {
+            LayerData &ld = it->second;
+
+            if(ld.backendNodes[DNN_BACKEND_TIMVX])
+                node = ld.backendNodes[DNN_BACKEND_TIMVX].dynamicCast<TimVXBackendNode>();
+            else
+                continue;
+
+            // Binding tvTensor and tvOp
+            if(node->opIndex >= 0)
+                node->opBinding();
+        }
+#endif
+    }
+
     void allocateLayer(int lid, const LayersShapesMap& layersShapes)
     {
         CV_TRACE_FUNCTION();
@@ -2848,7 +3141,8 @@ struct Net::Impl : public detail::NetImplBase
             ld.outputBlobsWrappers[i] = wrap(ld.outputBlobs[i]);
 
         /* CUDA backend has its own system for internal blobs; we don't need these */
-        ld.internalBlobsWrappers.resize((preferableBackend == DNN_BACKEND_CUDA) ? 0 : ld.internals.size());
+        ld.internalBlobsWrappers.resize(
+            (preferableBackend == DNN_BACKEND_CUDA || preferableBackend == DNN_BACKEND_TIMVX) ? 0 : ld.internals.size());
         for (int i = 0; i < ld.internalBlobsWrappers.size(); ++i)
             ld.internalBlobsWrappers[i] = wrap(ld.internals[i]);
 
@@ -2892,7 +3186,8 @@ struct Net::Impl : public detail::NetImplBase
         if(!fusion || (preferableBackend != DNN_BACKEND_OPENCV &&
                         preferableBackend != DNN_BACKEND_CUDA &&
                         preferableBackend != DNN_BACKEND_INFERENCE_ENGINE_NN_BUILDER_2019 &&
-                        preferableBackend != DNN_BACKEND_INFERENCE_ENGINE_NGRAPH))
+                        preferableBackend != DNN_BACKEND_INFERENCE_ENGINE_NGRAPH && 
+                        preferableBackend != DNN_BACKEND_TIMVX))
            return;
 
         // scan through all the layers. If there is convolution layer followed by the activation layer,
@@ -3707,6 +4002,10 @@ struct Net::Impl : public detail::NetImplBase
                  else if (preferableBackend == DNN_BACKEND_WEBNN)
                 {
                     forwardWebnn(ld.outputBlobsWrappers, node, isAsync);
+                }
+                else if (preferableBackend == DNN_BACKEND_TIMVX)
+                {
+                    forwardTimVX(ld.outputBlobsWrappers, node);
                 }
                 else if (preferableBackend == DNN_BACKEND_VKCOM)
                 {
@@ -4882,9 +5181,9 @@ void Net::setPreferableBackend(int backendId)
     if (backendId == DNN_BACKEND_DEFAULT)
         backendId = (Backend)PARAM_DNN_BACKEND_DEFAULT;
 
-    if (impl->netWasQuantized && backendId != DNN_BACKEND_OPENCV)
+    if (impl->netWasQuantized && backendId != DNN_BACKEND_OPENCV && backendId != DNN_BACKEND_TIMVX)
     {
-        CV_LOG_WARNING(NULL, "DNN: Only default backend supports quantized networks");
+        CV_LOG_WARNING(NULL, "DNN: Only default backend and TIMVX backend supports quantized networks");
         backendId = DNN_BACKEND_OPENCV;
     }
 
@@ -4906,9 +5205,9 @@ void Net::setPreferableTarget(int targetId)
     CV_TRACE_ARG(targetId);
 
     if (impl->netWasQuantized && targetId != DNN_TARGET_CPU &&
-        targetId != DNN_TARGET_OPENCL && targetId != DNN_TARGET_OPENCL_FP16)
+        targetId != DNN_TARGET_OPENCL && targetId != DNN_TARGET_OPENCL_FP16 && targetId != DNN_TARGET_NPU)
     {
-        CV_LOG_WARNING(NULL, "DNN: Only CPU and OpenCL/OpenCL FP16 target is supported by quantized networks");
+        CV_LOG_WARNING(NULL, "DNN: Only CPU, OpenCL/OpenCL FP16, and NPU target is supported by quantized networks");
         targetId = DNN_TARGET_CPU;
     }
 
@@ -5132,7 +5431,7 @@ string Net::Impl::dump()
             prevNode = itBackend->second;
         }
     }
-    std::vector<string> colors = {"#ffffb3", "#fccde5", "#8dd3c7", "#bebada", "#80b1d3", "#fdb462", "#ff4848", "#b35151", "#b266ff"};
+    std::vector<string> colors = {"#ffffb3", "#fccde5", "#8dd3c7", "#bebada", "#80b1d3", "#fdb462", "#ff4848", "#b35151", "#b266ff", "#3cb371"};
     string backend;
     switch (prefBackend)
     {
@@ -5145,6 +5444,7 @@ string Net::Impl::dump()
         case DNN_BACKEND_VKCOM: backend = "VULKAN/"; break;
         case DNN_BACKEND_CUDA: backend = "CUDA/"; break;
         case DNN_BACKEND_WEBNN: backend = "WEBNN/"; break;
+        case DNN_BACKEND_TIMVX: backend = "TIMVX/"; break;
         // don't use default:
     }
     out << "digraph G {\n";
@@ -5283,6 +5583,7 @@ string Net::Impl::dump()
             case DNN_TARGET_FPGA: out << "FPGA"; colorId = 4; break;
             case DNN_TARGET_CUDA: out << "CUDA"; colorId = 5; break;
             case DNN_TARGET_CUDA_FP16: out << "CUDA_FP16"; colorId = 6; break;
+            case DNN_TARGET_NPU: out << "NPU"; colorId = 9; break;
             // don't use default:
         }
         CV_Assert(colorId < colors.size());
@@ -5739,6 +6040,16 @@ Ptr<BackendNode> Layer::initNgraph(const std::vector<Ptr<BackendWrapper> > & inp
 Ptr<BackendNode> Layer::initWebnn(const std::vector<Ptr<BackendWrapper> > & inputs, const std::vector<Ptr<BackendNode> >& nodes)
 {
     CV_Error(Error::StsNotImplemented, "WebNN pipeline of " + type +
+                                       " layers is not defined.");
+    return Ptr<BackendNode>();
+}
+
+Ptr<BackendNode> Layer::initTimVX(void* timVxInfo,
+                                  const std::vector<Ptr<BackendWrapper> > &,
+                                  const std::vector<Ptr<BackendWrapper> > &,
+                                  bool isLast)
+{
+    CV_Error(Error::StsNotImplemented, "TimVX pipeline of " + type +
                                        " layers is not defined.");
     return Ptr<BackendNode>();
 }

@@ -12,6 +12,9 @@ testing::internal::ParamGenerator< tuple<Backend, Target> > dnnBackendsAndTarget
 {
     std::vector< tuple<Backend, Target> > targets;
     targets.push_back(make_tuple(DNN_BACKEND_OPENCV, DNN_TARGET_CPU));
+#ifdef HAVE_TIMVX
+    targets.push_back(make_tuple(DNN_BACKEND_TIMVX, DNN_TARGET_NPU));
+#endif
     return testing::ValuesIn(targets);
 }
 
@@ -318,15 +321,15 @@ TEST_P(Test_Int8_layers, Identity)
 
 TEST_P(Test_Int8_layers, Slice)
 {
-    testLayer("split", "TensorFlow", 0.0033, 0.0056);
+   testLayer("split", "TensorFlow", 0.0033, 0.0056);
     testLayer("slice_4d", "TensorFlow", 0.003, 0.0073);
-    testLayer("strided_slice", "TensorFlow", 0.008, 0.0142);
-    testLayer("slice", "ONNX", 0.0046, 0.0077);
-    testLayer("slice_dynamic_axes", "ONNX", 0.0039, 0.0084);
-    testLayer("slice_opset_11_steps_2d", "ONNX", 0.0052, 0.0124);
-    testLayer("slice_opset_11_steps_3d", "ONNX", 0.0068, 0.014);
-    testLayer("slice_opset_11_steps_4d", "ONNX", 0.0041, 0.008);
-    testLayer("slice_opset_11_steps_5d", "ONNX", 0.0085, 0.021);
+   testLayer("strided_slice", "TensorFlow", 0.008, 0.0142);
+   testLayer("slice", "ONNX", 0.0046, 0.0077);
+   testLayer("slice_dynamic_axes", "ONNX", 0.0039, 0.0084);
+   testLayer("slice_opset_11_steps_2d", "ONNX", 0.0052, 0.0124);
+   testLayer("slice_opset_11_steps_3d", "ONNX", 0.0068, 0.014);
+   testLayer("slice_opset_11_steps_4d", "ONNX", 0.0041, 0.008);
+   testLayer("slice_opset_11_steps_5d", "ONNX", 0.0085, 0.021);
 }
 
 TEST_P(Test_Int8_layers, Dropout)

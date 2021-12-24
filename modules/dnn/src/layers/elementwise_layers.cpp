@@ -515,6 +515,9 @@ struct ReLUFunctor : public BaseFunctor
             params.blobs.clear();
             params.blobs.push_back(lookUpTable);
         }
+        params.set("input_scale", scales[0][0]);
+        params.set("input_zeropoint", zeropoints[0][0]);
+        params.set("slope", slope);
         return true;
     }
 
@@ -657,6 +660,8 @@ struct ReLU6Functor : public BaseFunctor
     bool tryQuantize(const std::vector<std::vector<float> > &scales,
                      const std::vector<std::vector<int> > &zeropoints, LayerParams& params)
     {
+        params.set("input_scale", scales[0][0]);
+        params.set("input_zeropoint", zeropoints[0][0]);
         return true;
     }
 
@@ -726,6 +731,8 @@ struct BaseDefaultFunctor : public BaseFunctor
         }
         params.blobs.clear();
         params.blobs.push_back(lookUpTable);
+        params.set("input_scale", scales[0][0]);
+        params.set("input_zeropoint", zeropoints[0][0]);
         return true;
     }
 

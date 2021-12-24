@@ -455,6 +455,9 @@ OCV_OPTION(WITH_TENGINE "Include Arm Inference Tengine support" OFF
 OCV_OPTION(WITH_ONNX "Include Microsoft ONNX Runtime support" OFF
   VISIBLE_IF TRUE
   VERIFY HAVE_ONNX)
+OCV_OPTION(WITH_TIMVX "Include Tim-VX support" ON
+  VISIBLE_IF TRUE
+  VERIFY HAVE_TIMVX)
 
 # OpenCV build components
 # ===================================================
@@ -799,6 +802,11 @@ endif()
 # --- WebNN ---
 if(WITH_WEBNN)
   include(cmake/OpenCVDetectWebNN.cmake)
+endif()
+
+# --- Tim-VX ---
+if(WITH_TIMVX)
+  include(cmake/OpenCVFindTIMVX.cmake)
 endif()
 
 # --- Inference Engine ---
@@ -1638,6 +1646,17 @@ if(WITH_WEBNN OR HAVE_WEBNN)
   if(HAVE_WEBNN AND NOT EMSCRIPTEN)
     status("    Include path:"  WEBNN_HEADER_DIRS THEN "${WEBNN_HEADER_DIRS}" ELSE "NO")
     status("    Link libraries:" WEBNN_LIBRARIES THEN "${WEBNN_LIBRARIES}" ELSE "NO")
+  endif()
+endif()
+
+if(WITH_TIMVX)
+  status("")
+  status("  Tim-VX:"     HAVE_TIMVX THEN "YES" ELSE "NO")
+  if(HAVE_TIMVX)
+    status("    Include path"  TIMVX_INCLUDE_DIR THEN "${TIMVX_INCLUDE_DIR}" ELSE "NO")
+    status("    Link libraries:" TIMVX_LIBRARY THEN "${TIMVX_LIBRARY}" ELSE "NO")
+    status("    VIVANTE SDK include path" VIVANTE_SDK_INCLUDE_DIR THEN "${VIVANTE_SDK_INCLUDE_DIR}" ELSE "NO")
+    status("    VIVANTE SDK libraries" VIVANTE_SDK_LIBRARIES THEN "${VIVANTE_SDK_LIBRARIES}" ELSE "NO")
   endif()
 endif()
 

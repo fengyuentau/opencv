@@ -30,6 +30,7 @@ void PrintTo(const cv::dnn::Backend& v, std::ostream* os)
     case DNN_BACKEND_INFERENCE_ENGINE_NN_BUILDER_2019: *os << "DLIE"; return;
     case DNN_BACKEND_INFERENCE_ENGINE_NGRAPH: *os << "NGRAPH"; return;
     case DNN_BACKEND_WEBNN: *os << "WEBNN"; return;
+    case DNN_BACKEND_TIMVX: *os << "TIMVX"; return;
     } // don't use "default:" to emit compiler warnings
     *os << "DNN_BACKEND_UNKNOWN(" << (int)v << ")";
 }
@@ -46,6 +47,7 @@ void PrintTo(const cv::dnn::Target& v, std::ostream* os)
     case DNN_TARGET_FPGA: *os << "FPGA"; return;
     case DNN_TARGET_CUDA: *os << "CUDA"; return;
     case DNN_TARGET_CUDA_FP16: *os << "CUDA_FP16"; return;
+    case DNN_TARGET_NPU: *os << "NPU"; return;
     } // don't use "default:" to emit compiler warnings
     *os << "DNN_TARGET_UNKNOWN(" << (int)v << ")";
 }

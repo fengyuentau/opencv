@@ -1,4 +1,4 @@
-set(TIMVX_COMMIT_HASH "fd27bf46713220396e2ae37395a9f500f4495d5e")
+set(TIMVX_COMMIT_HASH "0b3fe05d62069d942147ca42673d48deab71615f")
 set(OCV_TIMVX_DIR "${OpenCV_BINARY_DIR}/3rdparty/libtim-vx")
 set(OCV_TIMVX_SOURCE_PATH "${OCV_TIMVX_DIR}/TIM-VX-${TIMVX_COMMIT_HASH}")
 
@@ -13,7 +13,7 @@ if(EXISTS "${OCV_TIMVX_SOURCE_PATH}")
 else()
     set(OCV_TIMVX_FILENAME "${TIMVX_COMMIT_HASH}.zip")
     set(OCV_TIMVX_URL "https://github.com/fengyuentau/TIM-VX/archive/")
-    set(timvx_zip_md5sum 59fe6d837ab4452545ffea46c94fb308)
+    set(timvx_zip_md5sum 31205005174da11b2f0a3e3dc5e0eb31)
 
     ocv_download(FILENAME ${OCV_TIMVX_FILENAME}
                  HASH ${timvx_zip_md5sum}
@@ -51,11 +51,13 @@ if(BUILD_TIMVX)
         ocv_download(FILENAME ${vivante_sdk_filename}
                      HASH ${vivante_sdk_${VIVANTE_SDK_FOR}_md5sum}
                      URL "${VIVANTE_SDK_URL}"
-		     DESTINATION_DIR "${OCV_VIVANTE_DIR}"
+                     DESTINATION_DIR "${OCV_VIVANTE_DIR}"
                      ID "${VIVANTE_SDK_FOR}"
                      STATUS res
                      UNPACK RELATIVE_URL)
-        set(VIVANTE_SDK_DIR "${OCV_TIMVX_DIR}/aarch64_${VIVANTE_SDK_FOR}_6.4.8.tgz")
+        set(VIVANTE_SDK_DIR "${OCV_VIVANTE_DIR}/aarch64_${VIVANTE_SDK_FOR}_6.4.8")
+
+        set(EXTERNAL_VIV_SDK "${VIVANTE_SDK_DIR}" CACHE INTERNAL "" FORCE)
     elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL x86_64)
         set(VIVANTE_SDK_DIR "${OCV_TIMVX_SOURCE_PATH}/prebuilt-sdk/x86_64_linux")
         message(STATUS "TIM-VX: Build from source using prebuilt-sdk/x86_64_linux as VIVANTE_SDK_DIR")

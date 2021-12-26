@@ -2,7 +2,6 @@ set(TIMVX_COMMIT_HASH "0b3fe05d62069d942147ca42673d48deab71615f")
 set(OCV_TIMVX_DIR "${OpenCV_BINARY_DIR}/3rdparty/libtim-vx")
 set(OCV_TIMVX_SOURCE_PATH "${OCV_TIMVX_DIR}/TIM-VX-${TIMVX_COMMIT_HASH}")
 
-set(VIVANTE_SDK_FOR "A311D" CACHE STRING "Either A311D or S905D3")
 set(OCV_VIVANTE_DIR "${OCV_TIMVX_DIR}/VIVANTE_SDK")
 
 if(EXISTS "${OCV_TIMVX_SOURCE_PATH}")
@@ -43,6 +42,28 @@ if(BUILD_TIMVX)
         set(vivante_sdk_filename "aarch64;6.4.8.tgz")
         set(vivante_sdk_A311D_md5sum "da530e28f73fd8b143330b6d1b97a1d8")
         set(vivante_sdk_S905D3_md5sum "f89ae2b52e53c4a8d5d3fb1e8b3bbcf9")
+
+        #set(VIVANTE_SDK_FOR "A311D" CACHE STRING "Either A311D or S905D3")
+        execute_process(
+            COMMAND
+              cat /proc/cpuinfo
+            RESULT_VARIABLE
+              timvx_result_var
+            OUTPUT_VARIABLE
+              timvx_output_var
+        )
+        string(FIND "${timvx_output_var}" "Khadas VIM3" _found_khadas_vim3)
+        if(NOT ${_found_khadas_vim3} EQUAL -1)
+            set(VIVANTE_SDK_FOR "A311D")
+        else()
+            string(FIND "{}" "Khadas VIM3L" _found_khadas_vim3l)
+            if(NOT ${_found_khadas_vim3l} EQUAL -1)
+                set(VIVANTE_SDK_FOR "S905D3")
+            else()
+                message("TIM-VX: Running on neither Khadas VIM3 nor VIM3L. TURNING OFF TIMVX_FOUND")
+                set(TIMVX_FOUND OFF)
+            endif()
+        endif()
 
         list(INSERT vivante_sdk_filename 1 ${VIVANTE_SDK_FOR})
         list(JOIN vivante_sdk_filename "_" vivante_sdk_filename)

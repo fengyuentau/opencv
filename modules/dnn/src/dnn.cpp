@@ -2877,7 +2877,7 @@ struct Net::Impl : public detail::NetImplBase
         CV_TRACE_FUNCTION();
         CV_Assert(preferableBackend == DNN_BACKEND_TIMVX);
 #ifdef HAVE_TIMVX
-        // Build TimVX Graph from sets of layers that support this TimVX backend. 
+        // Build TimVX Graph from sets of layers that support this TimVX backend.
         // Split a whole model on several TimVX Graph if some of layers are not implemented by TimVX backend.
         if (!haveTimVX())
             return;
@@ -3186,7 +3186,7 @@ struct Net::Impl : public detail::NetImplBase
         if(!fusion || (preferableBackend != DNN_BACKEND_OPENCV &&
                         preferableBackend != DNN_BACKEND_CUDA &&
                         preferableBackend != DNN_BACKEND_INFERENCE_ENGINE_NN_BUILDER_2019 &&
-                        preferableBackend != DNN_BACKEND_INFERENCE_ENGINE_NGRAPH && 
+                        preferableBackend != DNN_BACKEND_INFERENCE_ENGINE_NGRAPH &&
                         preferableBackend != DNN_BACKEND_TIMVX))
            return;
 

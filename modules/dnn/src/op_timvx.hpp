@@ -95,7 +95,7 @@ class TimVXBackendNode : public BackendNode
 public:
     TimVXBackendNode(const Ptr<TimVXGraph>& tvGraph);
     TimVXBackendNode(const Ptr<TimVXGraph>& tvGraph, const std::shared_ptr<tim::vx::Operation>& op);
-    TimVXBackendNode(const Ptr<TimVXGraph>& tvGraph, std::shared_ptr<tim::vx::Operation>& op, 
+    TimVXBackendNode(const Ptr<TimVXGraph>& tvGraph, std::shared_ptr<tim::vx::Operation>& op,
                     std::vector<int>& inputsIndex, std::vector<int>& outpusIndex);
 
     void setInputTensor();

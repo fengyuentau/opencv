@@ -406,7 +406,7 @@ public:
         }
 
         // Only work for single reshape Mat
-        if(reshapeNum != 1) 
+        if(reshapeNum != 1)
         {
           return Ptr<BackendNode>();
         }

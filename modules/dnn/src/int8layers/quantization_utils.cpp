@@ -219,7 +219,7 @@ public:
         inputsIndex.push_back(input_index);
 
         Ptr<tim::vx::Quantization> inputQuant = inputWrapper->getTensorQuantization();
-        
+
         tim::vx::QuantType quanType = inputQuant->Type();
         CV_Assert(quanType == tim::vx::QuantType::ASYMMETRIC);
 

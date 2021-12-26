@@ -1,4 +1,4 @@
-set(TIMVX_COMMIT_HASH "0b3fe05d62069d942147ca42673d48deab71615f")
+set(TIMVX_COMMIT_HASH "19c0bd820a83a2bede6e1999f833f915f8801bae")
 set(OCV_TIMVX_DIR "${OpenCV_BINARY_DIR}/3rdparty/libtim-vx")
 set(OCV_TIMVX_SOURCE_PATH "${OCV_TIMVX_DIR}/TIM-VX-${TIMVX_COMMIT_HASH}")
 
@@ -12,7 +12,7 @@ if(EXISTS "${OCV_TIMVX_SOURCE_PATH}")
 else()
     set(OCV_TIMVX_FILENAME "${TIMVX_COMMIT_HASH}.zip")
     set(OCV_TIMVX_URL "https://github.com/fengyuentau/TIM-VX/archive/")
-    set(timvx_zip_md5sum 31205005174da11b2f0a3e3dc5e0eb31)
+    set(timvx_zip_md5sum 78435539278454aa4d85b886f06bc454)
 
     ocv_download(FILENAME ${OCV_TIMVX_FILENAME}
                  HASH ${timvx_zip_md5sum}
@@ -40,8 +40,8 @@ if(BUILD_TIMVX)
 
     if(CMAKE_SYSTEM_PROCESSOR STREQUAL aarch64)
         set(vivante_sdk_filename "aarch64;6.4.8.tgz")
-        set(vivante_sdk_A311D_md5sum "da530e28f73fd8b143330b6d1b97a1d8")
-        set(vivante_sdk_S905D3_md5sum "f89ae2b52e53c4a8d5d3fb1e8b3bbcf9")
+        set(vivante_sdk_A311D_md5sum da530e28f73fd8b143330b6d1b97a1d8)
+        set(vivante_sdk_S905D3_md5sum f89ae2b52e53c4a8d5d3fb1e8b3bbcf9)
 
         #set(VIVANTE_SDK_FOR "A311D" CACHE STRING "Either A311D or S905D3")
         execute_process(

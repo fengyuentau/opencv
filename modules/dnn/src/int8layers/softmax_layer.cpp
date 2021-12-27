@@ -108,6 +108,7 @@ public:
         // output tensor
         CV_Assert(outputsWrapper.size() == 1);
         Ptr<TimVXBackendWrapper> outputWrapper = outputsWrapper[0].dynamicCast<TimVXBackendWrapper>();
+        Mat dstMat = outputWrapper->getMat();
         Ptr<tim::vx::Quantization> outputQuant = Ptr<tim::vx::Quantization>(
                 new tim::vx::Quantization(tim::vx::QuantType::ASYMMETRIC, output_sc, output_zp));
 
@@ -119,10 +120,16 @@ public:
 
             // For Graph Output tensor, we need to set tensor shape before createTensor().
             outputWrapper->setTensorShape(shapeType);
-            outputWrapper->createTensor(graph, tim::vx::TensorAttribute::OUTPUT, outputQuant);
+            if(dstMat.type() == CV_32F)
+                outputWrapper->createTensor(graph, tim::vx::TensorAttribute::OUTPUT);
+            else
+                outputWrapper->createTensor(graph, tim::vx::TensorAttribute::OUTPUT, outputQuant);
         } else
         {
-            outputWrapper->createTensor(graph, tim::vx::TensorAttribute::TRANSIENT, outputQuant);
+            if(dstMat.type() == CV_32F)
+                outputWrapper->createTensor(graph, tim::vx::TensorAttribute::TRANSIENT);
+            else
+                outputWrapper->createTensor(graph, tim::vx::TensorAttribute::TRANSIENT, outputQuant);
         }
         output_index = tvGraph->addWrapper(outputWrapper);
         outputsIndex.push_back(output_index);

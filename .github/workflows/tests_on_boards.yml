@@ -31,7 +31,7 @@ jobs:
       - name: tests for int8 layers
         run: |
           cd build
-          workspace=/home/opencv-cn/Workspace
-          OPENCV_TEST_DATA_PATH=${workspace}/opencv/opencv_extra/testdata VIVANTE_SDK_DIR=${workspace}/vivante_sdks/vim3/include/CL/cl_viv_vx_ext.h ./bin/opencv_test_dnn --gtest_filter="Test_Int8_layers.*/1"
+          actions=/home/opencv-cn/Workspace
+          OPENCV_TEST_DATA_PATH=${actions}/opencv/opencv_extra/testdata VIVANTE_SDK_DIR=${actions}/vivante_sdks/vim3 ./bin/opencv_test_dnn --gtest_filter="Test_Int8_layers.*/1"
       - name: tests for models
         run: echo 'TBD'

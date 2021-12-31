@@ -25,12 +25,12 @@ jobs:
       - uses: actions/checkout@v2
       # Runs a single command using the runners shell
       - name: configure
-        run: mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=RELEASE -DBUILD_TESTS=ON -DWITH_TIMVX=ON ..
+        run: mkdir build && cd build && cmake -DWITH_TIMVX=ON -DWITH_OPENCL=OFF ..
       - name: build
-        run: cmake --build build -j 4
+        run: cmake --build build --target opencv_test_dnn -j 4 --
       - name: tests for int8 layers
         run: |
           cd build
-          OPENCV_TEST_DATA_PATH=/home/tau/Workspace/opencv/opencv_extra/testdata ./bin/opencv_test_dnn --gtest_filter="Test_Int8_layers.*/1"
+          OPENCV_TEST_DATA_PATH=/home/opencv-cn/Workspace/opencv/opencv_extra/testdata ./bin/opencv_test_dnn --gtest_filter="Test_Int8_layers.*/1"
       - name: tests for models
         run: echo 'TBD'

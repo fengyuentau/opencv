@@ -7,7 +7,7 @@ on:
   # Triggers the workflow on push or pull request events but only for the master branch
   pull_request:
     branches: [ master ]
-    types: [ labeled ]
+    types: [ labeled, opened, synchronize, reopened ]
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
@@ -16,7 +16,7 @@ on:
 jobs:
   # This workflow contains a single job called "build"
   linux-gcc-arm64-timvx-khadas:
-    if: ${{ github.event.label.name == 'category:dnn_timvx' }}
+    if: contains(github.event.pull_request.labels.*.name, 'category:dnn_timvx')
     # The type of runner that the job will run on
     runs-on: [self-hosted, khadas-vim3]
     # Steps represent a sequence of tasks that will be executed as part of the job

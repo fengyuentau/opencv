@@ -1,29 +1,17 @@
-# This is a basic workflow to help you get started with Actions
-
 name: tests_on_boards
 
-# Controls when the workflow will run
 on:
-  # Triggers the workflow on push or pull request events but only for the master branch
   pull_request:
     branches: [ master ]
     types: [ labeled, opened, synchronize, reopened ]
 
-  # Allows you to run this workflow manually from the Actions tab
-  workflow_dispatch:
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This workflow contains a single job called "build"
   linux-gcc-arm64-timvx-khadas:
     if: contains(github.event.pull_request.labels.*.name, 'category:dnn_timvx')
-    # The type of runner that the job will run on
     runs-on: [self-hosted, khadas-vim3]
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v2
-      # Runs a single command using the runners shell
       - name: configure
         run: mkdir build && cd build && cmake -DWITH_TIMVX=ON -DWITH_OPENCL=OFF ..
       - name: build
@@ -34,3 +22,16 @@ jobs:
           OPENCV_TEST_DATA_PATH=/home/opencv-cn/Workspace/opencv/opencv_extra/testdata ./bin/opencv_test_dnn --gtest_filter="Test_Int8_layers.*/1"
       - name: tests for models
         run: echo 'TBD'
+
+  linux-gcc-x86-timvx-simulator:
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v2
+      - name: install dependencies 1
+        run: sudo apt-get install -y --no-install-recommends cmake build-essential ccache ninja-build python2-dev python-numpy python3-dev python3-numpy zlib1g-dev libjpeg-dev libpng-dev libtiff5-dev libopenjp2-7-dev libgtk-3-dev libavcodec-dev libavformat-dev libswscale-dev libtbb-dev libtbb2 ant ant-optional default-jdk hdf5-tools libhdf5-dev libleptonica-dev liblept5 tesseract-ocr tesseract-ocr-eng libtesseract-dev libtesseract4 libusb-dev libusb-1.0.0-dev libudev-dev libgdal-dev libvtk7-dev libgoogle-glog-dev libatlas-base-dev libeigen3-dev libsuitesparse-dev liblapacke-dev xvfb
+      - name: install dependencies 2
+        run: sudo apt-get install -y --no-install-recommends libva-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-plugins-good gstreamer1.0-plugins-ugly gstreamer1.0-libav libopenni2-dev libdc1394-22-dev libgphoto2-dev
+      - name: configure
+        run: mkdir build && cd build && cmake -DWITH_TIMVX=ON
+      - name: build
+        run: cmake --build build -j$(nproc)

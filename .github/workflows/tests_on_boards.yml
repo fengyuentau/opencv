@@ -32,6 +32,6 @@ jobs:
       - name: install dependencies 2
         run: sudo apt-get install -y --no-install-recommends libva-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-plugins-good gstreamer1.0-plugins-ugly gstreamer1.0-libav libopenni2-dev libdc1394-22-dev libgphoto2-dev
       - name: configure
-        run: mkdir build && cd build && cmake -DWITH_TIMVX=ON
+        run: mkdir build && cd build && cmake -DWITH_TIMVX=ON ..
       - name: build
         run: cmake --build build -j$(nproc)

@@ -16,7 +16,7 @@ jobs:
         run: |
           echo "${LANG}"
           echo "${JAVA_HOME}"
-          echo "trigger 1"
+          echo "trigger 2"
           echo "${OPENCV_CI_HOME}"
           echo "${DNN_MODELS}"
           echo "${BINARIES_CACHE}"

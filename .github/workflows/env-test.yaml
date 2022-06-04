@@ -7,7 +7,7 @@ on:
 
 jobs:
   test:
-    runs-on: macos-x86-64
+    runs-on: [self-hosted, macOS, X64]
     defaults:
       run:
         shell: bash

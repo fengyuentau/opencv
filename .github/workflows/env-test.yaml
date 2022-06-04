@@ -3,7 +3,7 @@ name: ENV test
 on:
   pull_request:
     branches:
-      - 4.x
+      - workflow_test
 
 jobs:
   test:

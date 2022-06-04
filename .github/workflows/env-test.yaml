@@ -16,3 +16,4 @@ jobs:
         run: |
           echo "${LANG}"
           echo "${JAVA_HOME}"
+          echo "trigger 1"

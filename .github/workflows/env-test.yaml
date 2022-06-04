@@ -17,3 +17,7 @@ jobs:
           echo "${LANG}"
           echo "${JAVA_HOME}"
           echo "trigger 1"
+          echo "${OPENCV_CI_HOME}"
+          echo "${DNN_MODELS}"
+          echo "${BINARIES_CACHE}"
+          echo "${GIT_CACHE}"

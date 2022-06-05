@@ -5,6 +5,9 @@ on:
     branches:
       - workflow_test
 
+env:
+  OPENCV_CI_HOME: $OPENCV_CI_HOME
+
 jobs:
   test:
     runs-on: [self-hosted, macOS, X64]
@@ -17,7 +20,7 @@ jobs:
           echo "${LANG}"
           echo "${JAVA_HOME}"
           echo "trigger 3"
-          echo "${OPENCV_CI_HOME}"
+          echo "$OPENCV_CI_HOME"
           echo "${DNN_MODELS}"
           echo "${BINARIES_CACHE}"
           echo "${GIT_CACHE}"

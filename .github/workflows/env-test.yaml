@@ -6,7 +6,7 @@ on:
       - workflow_test
 
 env:
-  OPENCV_CI_HOME: $OPENCV_CI_HOME
+  OPENCV_CI_HOME: ${OPENCV_CI_HOME}
 
 jobs:
   test:

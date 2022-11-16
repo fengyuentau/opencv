@@ -7,35 +7,35 @@ on:
 
 jobs:
   Ubuntu2004-ARM64:
-    uses: opencv/ci-gha-workflow/.github/workflows/OCV-PR-4.x-ARM64.yaml@main
+    uses: fengyuentau/ci-gha-workflow/.github/workflows/OCV-PR-4.x-ARM64.yaml@fix_workflow_name_in_concurrency_group
 
   Ubuntu2004-ARM64-Debug:
-    uses: opencv/ci-gha-workflow/.github/workflows/OCV-PR-4.x-ARM64-Debug.yaml@main
+    uses: fengyuentau/ci-gha-workflow/.github/workflows/OCV-PR-4.x-ARM64-Debug.yaml@fix_workflow_name_in_concurrency_group
 
   Ubuntu2004-x64:
-    uses: opencv/ci-gha-workflow/.github/workflows/OCV-PR-4.x-U20.yaml@main
+    uses: fengyuentau/ci-gha-workflow/.github/workflows/OCV-PR-4.x-U20.yaml@fix_workflow_name_in_concurrency_group
 
   Ubuntu2004-x64-CUDA:
     if: "${{ contains(github.event.pull_request.labels.*.name, 'category: dnn') }} || ${{ contains(github.event.pull_request.labels.*.name, 'category: dnn (onnx)') }}"
-    uses: opencv/ci-gha-workflow/.github/workflows/OCV-PR-4.x-U20-Cuda.yaml@main
+    uses: fengyuentau/ci-gha-workflow/.github/workflows/OCV-PR-4.x-U20-Cuda.yaml@fix_workflow_name_in_concurrency_group
 
   Windows10-x64:
-    uses: opencv/ci-gha-workflow/.github/workflows/OCV-PR-4.x-W10.yaml@main
+    uses: fengyuentau/ci-gha-workflow/.github/workflows/OCV-PR-4.x-W10.yaml@fix_workflow_name_in_concurrency_group
 
   macOS-ARM64:
-    uses: opencv/ci-gha-workflow/.github/workflows/OCV-PR-4.x-macOS-ARM64.yaml@main
+    uses: fengyuentau/ci-gha-workflow/.github/workflows/OCV-PR-4.x-macOS-ARM64.yaml@fix_workflow_name_in_concurrency_group
 
   macOS-x64:
-    uses: opencv/ci-gha-workflow/.github/workflows/OCV-PR-4.x-macOS-x86_64.yaml@main
+    uses: fengyuentau/ci-gha-workflow/.github/workflows/OCV-PR-4.x-macOS-x86_64.yaml@fix_workflow_name_in_concurrency_group
 
   iOS:
-    uses: opencv/ci-gha-workflow/.github/workflows/OCV-PR-4.x-iOS.yaml@main
+    uses: fengyuentau/ci-gha-workflow/.github/workflows/OCV-PR-4.x-iOS.yaml@fix_workflow_name_in_concurrency_group
 
   Android:
-    uses: opencv/ci-gha-workflow/.github/workflows/OCV-PR-4.x-Android.yaml@main
+    uses: fengyuentau/ci-gha-workflow/.github/workflows/OCV-PR-4.x-Android.yaml@fix_workflow_name_in_concurrency_group
 
   TIM-VX:
-    uses: opencv/ci-gha-workflow/.github/workflows/OCV-timvx-backend-tests-4.x.yml@main
+    uses: fengyuentau/ci-gha-workflow/.github/workflows/OCV-timvx-backend-tests-4.x.yml@fix_workflow_name_in_concurrency_group
 
   docs:
-    uses: opencv/ci-gha-workflow/.github/workflows/OCV-PR-4.x-docs.yaml@main
+    uses: fengyuentau/ci-gha-workflow/.github/workflows/OCV-PR-4.x-docs.yaml@fix_workflow_name_in_concurrency_group

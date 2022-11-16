@@ -6,6 +6,12 @@ on:
       - 4.x
 
 jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: check
+        run: echo "check"
+
   Ubuntu2004-ARM64:
     uses: fengyuentau/ci-gha-workflow/.github/workflows/OCV-PR-4.x-ARM64.yaml@fix_workflow_name_in_concurrency_group
 

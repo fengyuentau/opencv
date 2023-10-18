@@ -30,6 +30,16 @@ if(TIMVX_INSTALL_DIR AND NOT BUILD_TIMVX)
     set(BUILD_TIMVX OFF)
 
     set(TIMVX_INC_DIR "${TIMVX_INSTALL_DIR}/include" CACHE INTERNAL "TIM-VX include directory")
+
+    find_library(OPENVX_LIB "OpenVX" PATHS "${TIMVX_INSTALL_DIR}/lib" NO_DEFAULT_PATH)
+    if(OPENVX_LIB)
+        message(STATUS "TIM-VX: libOpenVX.so is found at ${OPENVX_LIB}")
+        set(OPENVX_FOUND ON)
+    else()
+        message(STATUS "TIM-VX: libOpenVX.so is not found. Turning off OPENVX_FOUND")
+        set(OPENVX_FOUND OFF)
+    endif()
+
     find_library(TIMVX_LIB "tim-vx" PATHS "${TIMVX_INSTALL_DIR}/lib" NO_DEFAULT_PATH)
     if(TIMVX_LIB)
         message(STATUS "TIM-VX: libtim-vx.so is found at ${TIMVX_LIB}")
@@ -54,16 +64,20 @@ if(TIMVX_INSTALL_DIR AND NOT BUILD_TIMVX)
 endif()
 
 # if(TIMVX_FOUND AND TIMVX_VIV_FOUND)
-if(TIMVX_FOUND)
+if(TIMVX_FOUND AND OPENVX_FOUND)
     set(HAVE_TIMVX 1)
 
     message(STATUS "TIM-VX: Found TIM-VX includes: ${TIMVX_INC_DIR}")
     message(STATUS "TIM-VX: Found TIM-VX library: ${TIMVX_LIB}")
+
     set(TIMVX_LIBRARY   ${TIMVX_LIB})
     set(TIMVX_INCLUDE_DIR   ${TIMVX_INC_DIR})
+    ocv_add_external_target(timvx "${TIMVX_INC_DIR}" "${TIMVX_LIBRARY}" "HAVE_CANN")
 
     # message(STATUS "TIM-VX: Found VIVANTE SDK libraries: ${VIVANTE_SDK_DIR}/lib")
     # link_directories(${VIVANTE_SDK_DIR}/lib)
+    message(STATUS "TIM-VX: Found OpenVX library: ${OPENVX_LIB}")
+    link_directories(${TIMVX_INSTALL_DIR}/lib)
 endif()
 
 MARK_AS_ADVANCED(

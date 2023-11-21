@@ -851,6 +851,11 @@ CV__DNN_INLINE_NS_BEGIN
         static Ptr<GeluLayer> create(const LayerParams &params);
     };
 
+    class CV_EXPORTS BiasGeluLayer : public ActivationLayer {
+     public:
+        static Ptr<BiasGeluLayer> create(const LayerParams &params);
+    };
+
     class CV_EXPORTS GeluApproximationLayer : public ActivationLayer
     {
     public:

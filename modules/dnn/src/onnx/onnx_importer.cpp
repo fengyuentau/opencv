@@ -3913,7 +3913,19 @@ void ONNXImporter::parseQSoftmax(LayerParams& layerParams, const opencv_onnx::No
 }
 
 void ONNXImporter::parseBiasGelu(LayerParams& layerParams, const opencv_onnx::NodeProto& node_proto) {
-    // TODO: const -> parameter
+    // https://github.com/microsoft/onnxruntime/blob/main/docs/ContribOperators.md#com.microsoft.BiasGelu
+    CV_CheckEQ(node_proto.input_size(), 2, "DNN/ONNXImporter/BiasGelu: two inputs are required");
+    CV_CheckTrue(constBlobs.find(node_proto.input(1)) != constBlobs.end(),
+                 "DNN/ONNXImporter/BiasGelu: bias must be constant");
+
+    auto bias = getBlob(node_proto, 1);
+    std::cout << "importer: " << bias.total() << std::endl;
+    // Check if bias is a 1d tensor
+    CV_CheckEQ(getBlobExtraInfo(node_proto, 1).real_ndims, 1, "DNN/ONNXImporter/BiasGelu: bias is required to be one dimensional");
+    layerParams.set("have_bias", true);
+    layerParams.blobs.push_back(bias);
+
+    addLayer(layerParams, node_proto);
 }
 
 // Domain: ai.onnx (default)

@@ -842,6 +842,30 @@ struct GeluFunctor : public BaseDefaultFunctor<GeluFunctor>
 template<>
 const char* const BaseDefaultFunctor<GeluFunctor>::ocl_kernel_name = "GeluForward";
 
+struct BiasGeluFunctor : public BaseFunctor {
+    typedef BiasGeluLayer Layer;
+    Mat bias;
+
+    explicit BiasGeluFunctor(Mat _bias=Mat()) : bias(_bias) { std::cout << bias.total() << std::endl; }
+
+    bool supportBackend(int backendId, int) {
+        return backendId == DNN_BACKEND_OPENCV;
+    }
+
+    void apply(const float *src, float *dst, int stripe_start, int stripe_size,
+               size_t inner_size, int channel_start, int channel_end) const {
+        const auto *b = bias.ptr<const float>() + stripe_start;
+        for (int c = channel_start; c < channel_end; c++, src += inner_size, dst += inner_size) {
+            for (int i = 0; i < stripe_size; i++) {
+                float x = src[i] + b[i];
+                dst[i] = 0.5f * x * (1.0f + erf(x * M_SQRT1_2));
+            }
+        }
+    }
+
+    int64 getFLOPSPerElement() const { return 1; }
+};
+
 namespace GeluApproximationConstants
 {
     static constexpr float sqrt_2_pi = 0.7978845834732056f;
@@ -2810,6 +2834,13 @@ Ptr<ReLU6Layer> ReLU6Layer::create(const LayerParams& params)
     l->minValue = minValue;
     l->maxValue = maxValue;
 
+    return l;
+}
+
+Ptr<BiasGeluLayer> BiasGeluLayer::create(const LayerParams &params) {
+    auto bias = params.blobs[0];
+    Ptr<BiasGeluLayer> l(new ElementWiseLayer<BiasGeluFunctor>(BiasGeluFunctor(bias)));
+    l->setParamsFrom(params);
     return l;
 }
 

@@ -232,11 +232,12 @@ private:
 
     Graph after fusion:  [Input] -> BiasGelu(B=bias) -> [Output]
 */
-class BiasGeluSubGraph : public {
+class BiasGeluSubGraph : public Subgraph {
  public:
     BiasGeluSubGraph() {
         int input = addNodeToMatch("");
         add = addNodeToMatch("Add", input, addNodeToMatch(""));
+        addNodeToMatch("Gelu", add);
 
         setFusedNode("BiasGelu", input);
     }
@@ -245,6 +246,7 @@ class BiasGeluSubGraph : public {
                        std::vector<int>& matchedNodesIds) CV_OVERRIDE {
         if (Subgraph::match(net, nodeId, matchedNodesIds)) {
             bias_name = getInputName(net, matchedNodesIds[add], 0);
+            std::cout << "BiasGelu Matched!" << std::endl;
             return true;
         }
         return false;
@@ -253,13 +255,14 @@ class BiasGeluSubGraph : public {
     virtual void finalize(const Ptr<ImportGraphWrapper>&,
                           const Ptr<ImportNodeWrapper>& fusedNode,
                           std::vector<Ptr<ImportNodeWrapper> >&) CV_OVERRIDE {
+        opencv_onnx::NodeProto* node = fusedNode.dynamicCast<ONNXNodeWrapper>()->node;
         // add input
         node->add_input(bias_name);
     }
  private:
     int add;
     std::string bias_name;
-}
+};
 
 /*  Fusion for GeluApproximation.
 
@@ -1206,6 +1209,7 @@ void simplifySubgraphs(opencv_onnx::GraphProto& net)
 {
     std::vector<Ptr<Subgraph> > subgraphs;
     subgraphs.push_back(makePtr<GeluSubGraph>());
+    subgraphs.push_back(makePtr<BiasGeluSubGraph>());
     subgraphs.push_back(makePtr<GeluApproximationSubGraph>());
     subgraphs.push_back(makePtr<LayerNormSubGraph>());
     subgraphs.push_back(makePtr<GatherCastSubgraph>());

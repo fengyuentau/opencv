@@ -37,6 +37,10 @@ TEST_F(Test_Graph_Simplifier, GeluSubGraph) {
     test("gelu", "Gelu");
 }
 
+TEST_F(Test_Graph_Simplifier, BiasGeluSubGraph) {
+    test("bias_gelu", "BiasGelu");
+}
+
 TEST_F(Test_Graph_Simplifier, GeluApproximationSubGraph) {
     test("gelu_approximation", "GeluApproximation");
 }

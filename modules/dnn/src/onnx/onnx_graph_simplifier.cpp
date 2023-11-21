@@ -158,6 +158,19 @@ static Mat extractConstant(const Ptr<ImportGraphWrapper>& net, int node_id, int 
     }
 }
 
+// TODO: support cummutative ops
+static std::string getInputName(const Ptr<ImportGraphWrapper>& net, int node_id, int input_id) {
+    auto onnx_net = net.dynamicCast<ONNXGraphWrapper>();
+    int initializer_id = onnx_net->getInputInitializerId(node_id, input_id);
+    if (initializer_id != -1) {
+        return onnx_net->getNameOfInitializer(initializer_id);
+    }
+    else {
+        const auto node = net->getNode(node_id);
+        return node->getInputName(input_id);
+    }
+}
+
 /*  Fusion for Gelu.
 
     Graph before fusion:
@@ -212,6 +225,41 @@ public:
 private:
     int div, add, mul2;
 };
+
+/*  Subgraph fusion for BiasGelu. Be sure to run this after GeluSubgraph.
+
+    Graph before fusion: [Input] -> Add(B=bias) -> Gelu -> [Output]
+
+    Graph after fusion:  [Input] -> BiasGelu(B=bias) -> [Output]
+*/
+class BiasGeluSubGraph : public {
+ public:
+    BiasGeluSubGraph() {
+        int input = addNodeToMatch("");
+        add = addNodeToMatch("Add", input, addNodeToMatch(""));
+
+        setFusedNode("BiasGelu", input);
+    }
+
+    virtual bool match(const Ptr<ImportGraphWrapper>& net, int nodeId,
+                       std::vector<int>& matchedNodesIds) CV_OVERRIDE {
+        if (Subgraph::match(net, nodeId, matchedNodesIds)) {
+            bias_name = getInputName(net, matchedNodesIds[add], 0);
+            return true;
+        }
+        return false;
+    }
+
+    virtual void finalize(const Ptr<ImportGraphWrapper>&,
+                          const Ptr<ImportNodeWrapper>& fusedNode,
+                          std::vector<Ptr<ImportNodeWrapper> >&) CV_OVERRIDE {
+        // add input
+        node->add_input(bias_name);
+    }
+ private:
+    int add;
+    std::string bias_name;
+}
 
 /*  Fusion for GeluApproximation.
 

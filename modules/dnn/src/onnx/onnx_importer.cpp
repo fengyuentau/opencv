@@ -207,6 +207,7 @@ private:
     void parseQConcat              (LayerParams& layerParams, const opencv_onnx::NodeProto& node_proto);
     void parseQGemm                (LayerParams& layerParams, const opencv_onnx::NodeProto& node_proto);
     void parseQSoftmax             (LayerParams& layerParams, const opencv_onnx::NodeProto& node_proto);
+    void parseBiasGelu             (LayerParams& layerParams, const opencv_onnx::NodeProto& node_proto);
 
     // '???' domain or '???' layer type
     void parseCustomLayer          (LayerParams& layerParams, const opencv_onnx::NodeProto& node_proto);
@@ -3911,6 +3912,10 @@ void ONNXImporter::parseQSoftmax(LayerParams& layerParams, const opencv_onnx::No
     addLayer(layerParams, node_proto);
 }
 
+void ONNXImporter::parseBiasGelu(LayerParams& layerParams, const opencv_onnx::NodeProto& node_proto) {
+    // TODO: const -> parameter
+}
+
 // Domain: ai.onnx (default)
 // URL: https://github.com/onnx/onnx/blob/master/docs/Operators.md
 void ONNXImporter::buildDispatchMap_ONNX_AI(int opset_version)
@@ -3994,6 +3999,9 @@ void ONNXImporter::buildDispatchMap_ONNX_AI(int opset_version)
     dispatch["QLinearConv"] = &ONNXImporter::parseQConv;
     dispatch["QLinearMatMul"] = &ONNXImporter::parseQMatMul;
 
+    // com.microsoft: in case opset is not available
+    dispatch["BiasGelu"] = &ONNXImporter::parseBiasGelu;
+
     domain_dispatch_map[str_domain_ai_onnx] = dispatch;
 }
 
@@ -4011,6 +4019,7 @@ void ONNXImporter::buildDispatchMap_COM_MICROSOFT(int opset_version)
     dispatch["QLinearConcat"] = &ONNXImporter::parseQConcat;
     dispatch["QGemm"] = &ONNXImporter::parseQGemm;
     dispatch["QLinearSoftmax"] = &ONNXImporter::parseQSoftmax;
+    dispatch["BiasGelu"] = &ONNXImporter::parseBiasGelu;
 
     domain_dispatch_map["com.microsoft"] = dispatch;
 }

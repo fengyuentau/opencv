@@ -4,15 +4,21 @@
 
 #include "../precomp.hpp"
 #include "layers_common.hpp"
-// backends
+
+// CUDA backend
 #include "../op_cuda.hpp"
 #ifdef HAVE_CUDA
-// #include "../cuda4dnn/primitives/matmul.hpp"
 #include "../cuda4dnn/primitives/inner_product.hpp"
 using namespace cv::dnn::cuda4dnn;
 #endif
+
+// CANN backend
 #include "../op_cann.hpp"
+
+// OpenVINO backend
 #include "../ie_ngraph.hpp"
+
+// Vulkan backend
 #include "../op_vkcom.hpp"
 
 #include <opencv2/dnn/shape_utils.hpp>
@@ -105,10 +111,10 @@ public:
     // FIXME: fix if conditions if 1d mat is supported properly
     void broadcastCWtihBeta(int M, int N, const Mat &C) {
         if (beta != 0 && !C.empty()) {
-            broadcast_C.clear();
-            broadcast_C.resize(M * N, 0.f);
+            broadcast_C = Mat::zeros(M, N, CV_32FC1);
 
             const float *ptr_c = C.ptr<const float>();
+            float *ptr_broadcast_c = broadcast_C.ptr<float>();
             const auto shape_C = shape(C);
             if ((real_ndims_C == 0) || (real_ndims_C == 1 && shape_C[0] == 1) ||
                 (real_ndims_C == 2 && shape_C[0] == 1 && shape_C[1] == 1)) {
@@ -116,7 +122,7 @@ public:
                 float c = *ptr_c;
                 int total = M * N;
                 for (int i = 0; i < total; ++i) {
-                    broadcast_C[i] = beta * c;
+                    ptr_broadcast_c[i] = beta * c;
                 }
             } else if ((real_ndims_C == 1 && shape_C[0] == N) ||
                        (real_ndims_C == 2 && shape_C[0] == 1 && shape_C[1] == N)) {
@@ -124,7 +130,7 @@ public:
                 for (int i = 0; i < M; ++i) {
                     int step = i * N;
                     for (int j = 0; j < N; ++j) {
-                        broadcast_C[step + j] = beta * ptr_c[j];
+                        ptr_broadcast_c[step + j] = beta * ptr_c[j];
                     }
                 }
             } else if (real_ndims_C == 2 && shape_C[0] == M && shape_C[1] == 1) {
@@ -132,12 +138,12 @@ public:
                 for (int i = 0; i < M; ++i) {
                     int step = i * N;
                     for (int j = 0; j < N; ++j) {
-                        broadcast_C[step + j] = beta * ptr_c[i];
+                        ptr_broadcast_c[step + j] = beta * ptr_c[i];
                     }
                 }
             } else {
                 // (M, N)
-                std::transform(ptr_c, ptr_c + M * N, broadcast_C.begin(), [this] (const float &c) {
+                std::transform(ptr_c, ptr_c + M * N, ptr_broadcast_c, [this] (const float &c) {
                     return this->beta * c; });
             }
         }
@@ -198,9 +204,9 @@ public:
                 broadcastCWtihBeta(M, N, inputs.back());
             }
             int step = M * N;
-            CV_CheckEQ(broadcast_C.size(), static_cast<size_t>(step), "DNN/Gemm: C is not broadcast properly");
+            CV_CheckEQ(broadcast_C.total(), static_cast<size_t>(step), "DNN/Gemm: C is not broadcast properly");
             float *ptr_y = Y.ptr<float>();
-            std::memcpy(ptr_y, broadcast_C.data(), step * sizeof(float));
+            std::memcpy(ptr_y, broadcast_C.ptr<float>(), step * sizeof(float));
         } else { // initialization
             float *ptr_y = Y.ptr<float>();
             size_t total = Y.total();
@@ -358,7 +364,7 @@ private:
     bool const_C;
     bool have_bias;
     std::vector<float> packed_B;
-    std::vector<float> broadcast_C;
+    Mat broadcast_C;
     int real_ndims_C;
     FastGemmOpt opt;
 };

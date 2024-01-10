@@ -5,6 +5,12 @@
 #include "../precomp.hpp"
 #include "layers_common.hpp"
 
+// OpenCL backend
+#ifdef HAVE_OPENCL
+#include "opencl_kernels_dnn.hpp"
+using namespace cv::dnn::ocl4dnn;
+#endif
+
 // CUDA backend
 #include "../op_cuda.hpp"
 #ifdef HAVE_CUDA
@@ -171,12 +177,20 @@ public:
             // broadcast
             broadcastCWtihBeta(M, N, C);
         }
+
+#ifdef HAVE_OPENCL
+        ocl_op.release();
+        umat_blobs.clear();
+        umat_half_blobs.clear();
+#endif
     }
 
     // Y = A * B + C, note that C is unidirectionaly broadcastable to (A * B).
     void forward(InputArrayOfArrays inputs_arr, OutputArrayOfArrays outputs_arr, OutputArrayOfArrays internals_arr) CV_OVERRIDE {
         CV_TRACE_FUNCTION();
         CV_TRACE_ARG_VALUE(name, "name", name.c_str());
+
+        CV_OCL_RUN(IS_DNN_OPENCL_TARGET(preferableTarget), forward_ocl(inputs_arr, outputs_arr, internals_arr))
 
         if (inputs_arr.depth() == CV_16S)
         {
@@ -220,6 +234,71 @@ public:
             fastGemmBatch(trans_a, trans_b, alpha, A, inputs[1], 1.f, Y, opt);
         }
     }
+
+#ifdef HAVE_OPENCL
+    // Y = alpha * A * B + beta * C
+    bool forward_ocl(InputArrayOfArrays inputs_arr, OutputArrayOfArrays outputs_arr, OutputArrayOfArrays internals_arr) {
+        std::vector<UMat> inputs, outputs;
+
+        bool use_half = (inputs_arr.depth() == CV_16S);
+        inputs_arr.getUMatVector(inputs);
+        outputs_arr.getUMatVector(outputs);
+
+        const auto &A = inputs[0];
+        auto &Y = outputs[0];
+
+        std::cout << "use_half=" << use_half << ", A.depth()=" << A.depth() << ", inputs_arr.depth()=" << inputs_arr.depth() << std::endl;
+
+        return false;
+
+        // size_t num_blobs = blobs.size();
+        // umat_blobs.resize(num_blobs);
+        // for (int i = 0; i < num_blobs; i++) {
+        //     blobs[i].copyTo(umat_blobs[i]);
+        // }
+        // if (use_half) {
+        //     umat_half_blobs.resize(num_blobs);
+        //     for (int i = 0; i < num_blobs; i++) {
+        //         convertFp16(umat_blobs[i], umat_half_blobs[i]);
+        //     }
+        // }
+
+        // const auto &A_shape = shape(A), &Y_shape = shape(Y);
+        // int ma = A_shape[A_shape.size() - 2], na = A_shape.back(),
+        //     M = trans_a ? na : ma,
+        //     K = trans_a ? ma : na,
+        //     N = Y_shape.back(),
+        //     batch = static_cast<int>(Y_shape[0] / M);
+
+        // if (ocl_op.empty()) {
+        //     OCL4DNNInnerProductConfig config;
+        //     config.M = M;          // M
+        //     config.num_output = N; // N
+        //     config.K = K;          // K
+        //     config.bias_term = have_bias;
+        //     config.use_half = use_half;
+
+        //     ocl_op = Ptr<OCL4DNNInnerProduct<float>>(new OCL4DNNInnerProduct<float>(config));
+        // }
+
+        // const auto &B = const_B ? umat_blobs[0] : inputs[1],
+        //            &C = have_bias ? umat_blobs.back() : UMat();
+
+        // bool ret = ocl_op->Forward(A, B, C, Y);
+
+        // if (ret) return true;
+
+        // // In case OCL4DNNInnerProduct does not work
+        // {
+        //     UMat A_FP32, B_FP32, C_FP32, Y_FP32;
+        //     if (use_half) {
+        //         convertFp16(A, A_FP32);
+        //         convertFp16(B, B_FP32);
+        //     }
+        // }
+
+    }
+#endif
 
 #ifdef HAVE_CUDA
     // Y = A * B + C. B should be guaranteed as two dimensional.
@@ -367,6 +446,12 @@ private:
     Mat broadcast_C;
     int real_ndims_C;
     FastGemmOpt opt;
+
+#ifdef HAVE_OPENCL
+    Ptr<OCL4DNNInnerProduct<float> > ocl_op;
+    std::vector<UMat> umat_blobs;
+    std::vector<UMat> umat_half_blobs;
+#endif
 };
 
 Ptr<GemmLayer> GemmLayer::create(const LayerParams& params) {

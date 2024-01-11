@@ -247,15 +247,13 @@ public:
         const auto &A = inputs[0];
         auto &Y = outputs[0];
 
-        std::cout << "use_half=" << use_half << ", A.depth()=" << A.depth() << ", inputs_arr.depth()=" << inputs_arr.depth() << std::endl;
+        // std::cout << "use_half=" << use_half << ", A.depth()=" << A.depth() << ", inputs_arr.depth()=" << inputs_arr.depth() << std::endl;
 
-        return false;
-
-        // size_t num_blobs = blobs.size();
-        // umat_blobs.resize(num_blobs);
-        // for (int i = 0; i < num_blobs; i++) {
-        //     blobs[i].copyTo(umat_blobs[i]);
-        // }
+        size_t num_blobs = blobs.size();
+        umat_blobs.resize(num_blobs);
+        for (int i = 0; i < num_blobs; i++) {
+            blobs[i].copyTo(umat_blobs[i]);
+        }
         // if (use_half) {
         //     umat_half_blobs.resize(num_blobs);
         //     for (int i = 0; i < num_blobs; i++) {
@@ -263,40 +261,34 @@ public:
         //     }
         // }
 
-        // const auto &A_shape = shape(A), &Y_shape = shape(Y);
-        // int ma = A_shape[A_shape.size() - 2], na = A_shape.back(),
-        //     M = trans_a ? na : ma,
-        //     K = trans_a ? ma : na,
-        //     N = Y_shape.back(),
-        //     batch = static_cast<int>(Y_shape[0] / M);
+        const auto &A_shape = shape(A), &Y_shape = shape(Y);
+        int ma = A_shape[A_shape.size() - 2], na = A_shape.back(),
+            M = trans_a ? na : ma,
+            K = trans_a ? ma : na,
+            N = Y_shape.back(),
+            batch = static_cast<int>(Y_shape[0] / M);
 
-        // if (ocl_op.empty()) {
-        //     OCL4DNNInnerProductConfig config;
-        //     config.M = M;          // M
-        //     config.num_output = N; // N
-        //     config.K = K;          // K
-        //     config.bias_term = have_bias;
-        //     config.use_half = use_half;
+        if (ocl_op.empty()) {
+            OCL4DNNInnerProductConfig config;
+            config.M = M;          // M
+            config.num_output = N; // N
+            config.K = K;          // K
+            config.bias_term = have_bias;
+            config.use_half = false;
 
-        //     ocl_op = Ptr<OCL4DNNInnerProduct<float>>(new OCL4DNNInnerProduct<float>(config));
-        // }
+            ocl_op = Ptr<OCL4DNNInnerProduct<float>>(new OCL4DNNInnerProduct<float>(config));
+        }
 
-        // const auto &B = const_B ? umat_blobs[0] : inputs[1],
-        //            &C = have_bias ? umat_blobs.back() : UMat();
+        const auto &B = const_B ? umat_blobs[0] : inputs[1],
+                   &C = have_bias ? umat_blobs.back() : UMat();
 
-        // bool ret = ocl_op->Forward(A, B, C, Y);
+        bool ret = ocl_op->Forward(A, B, C, Y);
 
-        // if (ret) return true;
+        if (ret) return true;
 
-        // // In case OCL4DNNInnerProduct does not work
-        // {
-        //     UMat A_FP32, B_FP32, C_FP32, Y_FP32;
-        //     if (use_half) {
-        //         convertFp16(A, A_FP32);
-        //         convertFp16(B, B_FP32);
-        //     }
-        // }
-
+        // In case OCL4DNNInnerProduct does not work
+        cv::gemm(A, B, alpha, C, beta, Y);
+        return true;
     }
 #endif
 

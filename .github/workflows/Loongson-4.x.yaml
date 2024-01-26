@@ -5,9 +5,9 @@ on:
     branches:
       - 4.x
 
-concurrency:
-  group: OCV-PR-4.x-macOS-ARM64-${{ github.ref }}
-  cancel-in-progress: true
+# concurrency:
+#   group: OCV-PR-4.x-macOS-ARM64-${{ github.ref }}
+#   cancel-in-progress: true
 
 env:
   EXTRA_CMAKE_OPTIONS: '-DBUILD_DOCS=ON -DPYTHON_DEFAULT_EXECUTABLE=/usr/bin/python3 -DOPENCV_DOWNLOAD_PATH=$BINARIES_CACHE -DBUILD_EXAMPLES=ON -DOPENCV_ENABLE_NONFREE=ON -DBUILD_ZLIB=OFF -DWITH_OPENCL=OFF'

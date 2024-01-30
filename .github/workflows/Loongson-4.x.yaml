@@ -20,8 +20,6 @@ env:
   OPENCV_TEST_DATA_PATH: '${{ github.workspace }}/opencv_extra/testdata'
   # GTEST_FILTER_STRING: '-GOTURN.memory_usage:DaSiamRPN.memory_usage:videoio_dynamic.basic_write:videoio/videocapture_acceleration.read/64:videoio/videocapture_acceleration.read/65:videoio/videocapture_acceleration.read/66:videoio/videocapture_acceleration.read/67'
 
-# warnings: https://github.com/fengyuentau/opencv/actions/runs/7665377694/job/20891162958?pr=11#step:14:16
-
 jobs:
   BuildAndTest:
     runs-on: [LOONGARCH64]
@@ -108,158 +106,159 @@ jobs:
         working-directory: ${{ github.workspace }}/build
       - name: Warnings check
         timeout-minutes: 60
+        id: check-warnings
         run: python3 $GIT_CACHE/warnings-handling.py
         working-directory: ${{ github.workspace }}/build
-      # - name: Accuracy:calib3d
-      #   timeout-minutes: 60
-      #   if: ${{ always() && steps.build-opencv.outcome == 'success' }}
-      #   run: ./bin/opencv_test_calib3d --test_threads=$PARALLEL_JOBS ${{ env.EXTRA_GTEST_OPTIONS }}
-      #   working-directory: ${{ github.workspace }}/build
-      # - name: Accuracy:core
-      #   timeout-minutes: 60
-      #   if: ${{ always() && steps.build-opencv.outcome == 'success' }}
-      #   run: ./bin/opencv_test_core --test_threads=$PARALLEL_JOBS ${{ env.EXTRA_GTEST_OPTIONS }}
-      #   working-directory: ${{ github.workspace }}/build
-      # - name: Accuracy:dnn
-      #   timeout-minutes: 60
-      #   if: ${{ always() && steps.build-opencv.outcome == 'success' }}
-      #   run: ./bin/opencv_test_dnn --test_threads=$PARALLEL_JOBS ${{ env.EXTRA_GTEST_OPTIONS }}
-      #   working-directory: ${{ github.workspace }}/build
-      # - name: Accuracy:features2d
-      #   timeout-minutes: 60
-      #   if: ${{ always() && steps.build-opencv.outcome == 'success' }}
-      #   run: ./bin/opencv_test_features2d --test_threads=$PARALLEL_JOBS ${{ env.EXTRA_GTEST_OPTIONS }}
-      #   working-directory: ${{ github.workspace }}/build
-      # - name: Accuracy:flann
-      #   timeout-minutes: 60
-      #   if: ${{ always() && steps.build-opencv.outcome == 'success' }}
-      #   run: ./bin/opencv_test_flann --test_threads=$PARALLEL_JOBS ${{ env.EXTRA_GTEST_OPTIONS }}
-      #   working-directory: ${{ github.workspace }}/build
+      - name: Accuracy:calib3d
+        timeout-minutes: 60
+        if: ${{ always() && steps.build-opencv.outcome == 'success' && steps.check-warnings.outcome == 'success' }}
+        run: xvfb-run -a ./bin/opencv_test_calib3d --test_threads=$PARALLEL_JOBS ${{ env.EXTRA_GTEST_OPTIONS }}
+        working-directory: ${{ github.workspace }}/build
+      - name: Accuracy:core
+        timeout-minutes: 60
+        if: ${{ always() && steps.build-opencv.outcome == 'success' && steps.check-warnings.outcome == 'success' }}
+        run: xvfb-run -a ./bin/opencv_test_core --test_threads=$PARALLEL_JOBS ${{ env.EXTRA_GTEST_OPTIONS }}
+        working-directory: ${{ github.workspace }}/build
+      - name: Accuracy:dnn
+        timeout-minutes: 60
+        if: ${{ always() && steps.build-opencv.outcome == 'success' && steps.check-warnings.outcome == 'success' }}
+        run: xvfb-run -a ./bin/opencv_test_dnn --test_threads=$PARALLEL_JOBS ${{ env.EXTRA_GTEST_OPTIONS }}
+        working-directory: ${{ github.workspace }}/build
+      - name: Accuracy:features2d
+        timeout-minutes: 60
+        if: ${{ always() && steps.build-opencv.outcome == 'success' && steps.check-warnings.outcome == 'success' }}
+        run: xvfb-run -a ./bin/opencv_test_features2d --test_threads=$PARALLEL_JOBS ${{ env.EXTRA_GTEST_OPTIONS }}
+        working-directory: ${{ github.workspace }}/build
+      - name: Accuracy:flann
+        timeout-minutes: 60
+        if: ${{ always() && steps.build-opencv.outcome == 'success' && steps.check-warnings.outcome == 'success' }}
+        run: xvfb-run -a ./bin/opencv_test_flann --test_threads=$PARALLEL_JOBS ${{ env.EXTRA_GTEST_OPTIONS }}
+        working-directory: ${{ github.workspace }}/build
       - name: Accuracy:gapi
         timeout-minutes: 60
-        if: ${{ always() && steps.build-opencv.outcome == 'success' }}
+        if: ${{ always() && steps.build-opencv.outcome == 'success' && steps.check-warnings.outcome == 'success' }}
         run: xvfb-run -a ./bin/opencv_test_gapi --test_threads=$PARALLEL_JOBS ${{ env.EXTRA_GTEST_OPTIONS }}
         working-directory: ${{ github.workspace }}/build
       - name: Accuracy:highgui
         timeout-minutes: 60
-        if: ${{ always() && steps.build-opencv.outcome == 'success' }}
+        if: ${{ always() && steps.build-opencv.outcome == 'success' && steps.check-warnings.outcome == 'success' }}
         run: xvfb-run -a ./bin/opencv_test_highgui --test_threads=$PARALLEL_JOBS ${{ env.EXTRA_GTEST_OPTIONS }}
         working-directory: ${{ github.workspace }}/build
-      # - name: Accuracy:imgcodecs
-      #   timeout-minutes: 60
-      #   if: ${{ always() && steps.build-opencv.outcome == 'success' }}
-      #   run: ./bin/opencv_test_imgcodecs --test_threads=$PARALLEL_JOBS ${{ env.EXTRA_GTEST_OPTIONS }}
-      #   working-directory: ${{ github.workspace }}/build
-      # - name: Accuracy:imgproc
-      #   timeout-minutes: 60
-      #   if: ${{ always() && steps.build-opencv.outcome == 'success' }}
-      #   run: ./bin/opencv_test_imgproc --test_threads=$PARALLEL_JOBS ${{ env.EXTRA_GTEST_OPTIONS }}
-      #   working-directory: ${{ github.workspace }}/build
-      # - name: Accuracy:ml
-      #   timeout-minutes: 60
-      #   if: ${{ always() && steps.build-opencv.outcome == 'success' }}
-      #   run: ./bin/opencv_test_ml --test_threads=$PARALLEL_JOBS ${{ env.EXTRA_GTEST_OPTIONS }}
-      #   working-directory: ${{ github.workspace }}/build
-      # - name: Accuracy:objdetect
-      #   timeout-minutes: 60
-      #   if: ${{ always() && steps.build-opencv.outcome == 'success' }}
-      #   run: ./bin/opencv_test_objdetect --test_threads=$PARALLEL_JOBS ${{ env.EXTRA_GTEST_OPTIONS }}
-      #   working-directory: ${{ github.workspace }}/build
-      # - name: Accuracy:photo
-      #   timeout-minutes: 60
-      #   if: ${{ always() && steps.build-opencv.outcome == 'success' }}
-      #   run: ./bin/opencv_test_photo --test_threads=$PARALLEL_JOBS ${{ env.EXTRA_GTEST_OPTIONS }}
-      #   working-directory: ${{ github.workspace }}/build
-      # - name: Accuracy:stitching
-      #   timeout-minutes: 60
-      #   if: ${{ always() && steps.build-opencv.outcome == 'success' }}
-      #   run: ./bin/opencv_test_stitching --test_threads=$PARALLEL_JOBS ${{ env.EXTRA_GTEST_OPTIONS }}
-      #   working-directory: ${{ github.workspace }}/build
-      # - name: Accuracy:video
-      #   timeout-minutes: 60
-      #   if: ${{ always() && steps.build-opencv.outcome == 'success' }}
-      #   run: ./bin/opencv_test_video --test_threads=$PARALLEL_JOBS ${{ env.EXTRA_GTEST_OPTIONS }}
-      #   working-directory: ${{ github.workspace }}/build
-      # - name: Accuracy:videoio
-      #   timeout-minutes: 60
-      #   if: ${{ always() && steps.build-opencv.outcome == 'success' }}
-      #   run: ./bin/opencv_test_videoio --test_threads=$PARALLEL_JOBS ${{ env.EXTRA_GTEST_OPTIONS }}
-      #   working-directory: ${{ github.workspace }}/build
-      # - name: Performance:calib3d
-      #   timeout-minutes: 60
-      #   if: ${{ always() && steps.build-opencv.outcome == 'success' }}
-      #   run: ./bin/opencv_perf_calib3d --perf_impl=plain --perf_min_samples=1 --perf_force_samples=1 --perf_verify_sanity --skip_unstable=1 --perf_threads=$PARALLEL_JOBS
-      #   working-directory: ${{ github.workspace }}/build
-      # - name: Performance:core
-      #   timeout-minutes: 60
-      #   if: ${{ always() && steps.build-opencv.outcome == 'success' }}
-      #   run: ./bin/opencv_perf_core --perf_impl=plain --perf_min_samples=1 --perf_force_samples=1 --perf_verify_sanity --skip_unstable=1 --perf_threads=$PARALLEL_JOBS
-      #   working-directory: ${{ github.workspace }}/build
-      # - name: Performance:dnn
-      #   timeout-minutes: 60
-      #   if: ${{ always() && steps.build-opencv.outcome == 'success' }}
-      #   run: ./bin/opencv_perf_dnn --perf_impl=plain --perf_min_samples=1 --perf_force_samples=1 --perf_verify_sanity --skip_unstable=1 --perf_threads=$PARALLEL_JOBS
-      #   working-directory: ${{ github.workspace }}/build
-      # - name: Performance:features2d
-      #   timeout-minutes: 60
-      #   if: ${{ always() && steps.build-opencv.outcome == 'success' }}
-      #   run: ./bin/opencv_perf_features2d --perf_impl=plain --perf_min_samples=1 --perf_force_samples=1 --perf_verify_sanity --skip_unstable=1 --perf_threads=$PARALLEL_JOBS
-      #   working-directory: ${{ github.workspace }}/build
-      - name: Performance:gapi
+      - name: Accuracy:imgcodecs
         timeout-minutes: 60
-        if: ${{ always() && steps.build-opencv.outcome == 'success' }}
-        run: xvfb-run -a ./bin/opencv_perf_gapi --perf_impl=plain --perf_min_samples=1 --perf_force_samples=1 --perf_verify_sanity --skip_unstable=1 --perf_threads=$PARALLEL_JOBS
+        if: ${{ always() && steps.build-opencv.outcome == 'success' && steps.check-warnings.outcome == 'success' }}
+        run: xvfb-run -a ./bin/opencv_test_imgcodecs --test_threads=$PARALLEL_JOBS ${{ env.EXTRA_GTEST_OPTIONS }}
         working-directory: ${{ github.workspace }}/build
-      # - name: Performance:imgcodecs
+      - name: Accuracy:imgproc
+        timeout-minutes: 60
+        if: ${{ always() && steps.build-opencv.outcome == 'success' && steps.check-warnings.outcome == 'success' }}
+        run: xvfb-run -a ./bin/opencv_test_imgproc --test_threads=$PARALLEL_JOBS ${{ env.EXTRA_GTEST_OPTIONS }}
+        working-directory: ${{ github.workspace }}/build
+      - name: Accuracy:ml
+        timeout-minutes: 60
+        if: ${{ always() && steps.build-opencv.outcome == 'success' && steps.check-warnings.outcome == 'success' }}
+        run: xvfb-run -a ./bin/opencv_test_ml --test_threads=$PARALLEL_JOBS ${{ env.EXTRA_GTEST_OPTIONS }}
+        working-directory: ${{ github.workspace }}/build
+      - name: Accuracy:objdetect
+        timeout-minutes: 60
+        if: ${{ always() && steps.build-opencv.outcome == 'success' && steps.check-warnings.outcome == 'success' }}
+        run: xvfb-run -a ./bin/opencv_test_objdetect --test_threads=$PARALLEL_JOBS ${{ env.EXTRA_GTEST_OPTIONS }}
+        working-directory: ${{ github.workspace }}/build
+      - name: Accuracy:photo
+        timeout-minutes: 60
+        if: ${{ always() && steps.build-opencv.outcome == 'success' && steps.check-warnings.outcome == 'success' }}
+        run: xvfb-run -a ./bin/opencv_test_photo --test_threads=$PARALLEL_JOBS ${{ env.EXTRA_GTEST_OPTIONS }}
+        working-directory: ${{ github.workspace }}/build
+      - name: Accuracy:stitching
+        timeout-minutes: 60
+        if: ${{ always() && steps.build-opencv.outcome == 'success' && steps.check-warnings.outcome == 'success' }}
+        run: xvfb-run -a ./bin/opencv_test_stitching --test_threads=$PARALLEL_JOBS ${{ env.EXTRA_GTEST_OPTIONS }}
+        working-directory: ${{ github.workspace }}/build
+      - name: Accuracy:video
+        timeout-minutes: 60
+        if: ${{ always() && steps.build-opencv.outcome == 'success' && steps.check-warnings.outcome == 'success' }}
+        run: xvfb-run -a ./bin/opencv_test_video --test_threads=$PARALLEL_JOBS ${{ env.EXTRA_GTEST_OPTIONS }}
+        working-directory: ${{ github.workspace }}/build
+      - name: Accuracy:videoio
+        timeout-minutes: 60
+        if: ${{ always() && steps.build-opencv.outcome == 'success' && steps.check-warnings.outcome == 'success' }}
+        run: xvfb-run -a ./bin/opencv_test_videoio --test_threads=$PARALLEL_JOBS ${{ env.EXTRA_GTEST_OPTIONS }}
+        working-directory: ${{ github.workspace }}/build
+      - name: Performance:calib3d
+        timeout-minutes: 60
+        if: ${{ always() && steps.build-opencv.outcome == 'success' && steps.check-warnings.outcome == 'success' }}
+        run: xvfb-run -a ./bin/opencv_perf_calib3d --perf_impl=plain --perf_min_samples=1 --perf_force_samples=1 --perf_verify_sanity --skip_unstable=1 --perf_threads=$PARALLEL_JOBS
+        working-directory: ${{ github.workspace }}/build
+      - name: Performance:core
+        timeout-minutes: 60
+        if: ${{ always() && steps.build-opencv.outcome == 'success' && steps.check-warnings.outcome == 'success' }}
+        run: xvfb-run -a ./bin/opencv_perf_core --perf_impl=plain --perf_min_samples=1 --perf_force_samples=1 --perf_verify_sanity --skip_unstable=1 --perf_threads=$PARALLEL_JOBS
+        working-directory: ${{ github.workspace }}/build
+      - name: Performance:dnn
+        timeout-minutes: 60
+        if: ${{ always() && steps.build-opencv.outcome == 'success' && steps.check-warnings.outcome == 'success' }}
+        run: xvfb-run -a ./bin/opencv_perf_dnn --perf_impl=plain --perf_min_samples=1 --perf_force_samples=1 --perf_verify_sanity --skip_unstable=1 --perf_threads=$PARALLEL_JOBS
+        working-directory: ${{ github.workspace }}/build
+      - name: Performance:features2d
+        timeout-minutes: 60
+        if: ${{ always() && steps.build-opencv.outcome == 'success' && steps.check-warnings.outcome == 'success' }}
+        run: xvfb-run -a ./bin/opencv_perf_features2d --perf_impl=plain --perf_min_samples=1 --perf_force_samples=1 --perf_verify_sanity --skip_unstable=1 --perf_threads=$PARALLEL_JOBS
+        working-directory: ${{ github.workspace }}/build
+      # - name: Performance:gapi # fails a lot tests: https://github.com/fengyuentau/opencv/actions/runs/7708566403/job/21007921185?pr=11#step:17:33299
       #   timeout-minutes: 60
-      #   if: ${{ always() && steps.build-opencv.outcome == 'success' }}
-      #   run: ./bin/opencv_perf_imgcodecs --perf_impl=plain --perf_min_samples=1 --perf_force_samples=1 --perf_verify_sanity --skip_unstable=1 --perf_threads=$PARALLEL_JOBS
+      #   if: ${{ always() && steps.build-opencv.outcome == 'success' && steps.check-warnings.outcome == 'success' }}
+      #   run: xvfb-run -a ./bin/opencv_perf_gapi --perf_impl=plain --perf_min_samples=1 --perf_force_samples=1 --perf_verify_sanity --skip_unstable=1 --perf_threads=$PARALLEL_JOBS
       #   working-directory: ${{ github.workspace }}/build
-      # - name: Performance:imgproc
-      #   timeout-minutes: 60
-      #   if: ${{ always() && steps.build-opencv.outcome == 'success' }}
-      #   run: ./bin/opencv_perf_imgproc --perf_impl=plain --perf_min_samples=1 --perf_force_samples=1 --perf_verify_sanity --skip_unstable=1 --perf_threads=$PARALLEL_JOBS
-      #   working-directory: ${{ github.workspace }}/build
-      # - name: Performance:objdetect
-      #   timeout-minutes: 60
-      #   if: ${{ always() && steps.build-opencv.outcome == 'success' }}
-      #   run: ./bin/opencv_perf_objdetect --perf_impl=plain --perf_min_samples=1 --perf_force_samples=1 --perf_verify_sanity --skip_unstable=1 --perf_threads=$PARALLEL_JOBS
-      #   working-directory: ${{ github.workspace }}/build
-      # - name: Performance:photo
-      #   timeout-minutes: 60
-      #   if: ${{ always() && steps.build-opencv.outcome == 'success' }}
-      #   run: ./bin/opencv_perf_photo --perf_impl=plain --perf_min_samples=1 --perf_force_samples=1 --perf_verify_sanity --skip_unstable=1 --perf_threads=$PARALLEL_JOBS
-      #   working-directory: ${{ github.workspace }}/build
-      # - name: Performance:stitching
-      #   timeout-minutes: 60
-      #   if: ${{ always() && steps.build-opencv.outcome == 'success' }}
-      #   run: ./bin/opencv_perf_stitching --perf_impl=plain --perf_min_samples=1 --perf_force_samples=1 --perf_verify_sanity --skip_unstable=1 --perf_threads=$PARALLEL_JOBS
-      #   working-directory: ${{ github.workspace }}/build
-      # - name: Performance:video
-      #   timeout-minutes: 60
-      #   if: ${{ always() && steps.build-opencv.outcome == 'success' }}
-      #   run: ./bin/opencv_perf_video --perf_impl=plain --perf_min_samples=1 --perf_force_samples=1 --perf_verify_sanity --skip_unstable=1 --perf_threads=$PARALLEL_JOBS
-      #   working-directory: ${{ github.workspace }}/build
-      # - name: Performance:videoio
-      #   timeout-minutes: 60
-      #   if: ${{ always() && steps.build-opencv.outcome == 'success' }}
-      #   run: ./bin/opencv_perf_videoio --perf_impl=plain --perf_min_samples=1 --perf_force_samples=1 --perf_verify_sanity --skip_unstable=1 --perf_threads=$PARALLEL_JOBS
-      #   working-directory: ${{ github.workspace }}/build
+      - name: Performance:imgcodecs
+        timeout-minutes: 60
+        if: ${{ always() && steps.build-opencv.outcome == 'success' && steps.check-warnings.outcome == 'success' }}
+        run: xvfb-run -a ./bin/opencv_perf_imgcodecs --perf_impl=plain --perf_min_samples=1 --perf_force_samples=1 --perf_verify_sanity --skip_unstable=1 --perf_threads=$PARALLEL_JOBS
+        working-directory: ${{ github.workspace }}/build
+      - name: Performance:imgproc
+        timeout-minutes: 60
+        if: ${{ always() && steps.build-opencv.outcome == 'success' && steps.check-warnings.outcome == 'success' }}
+        run: xvfb-run -a ./bin/opencv_perf_imgproc --perf_impl=plain --perf_min_samples=1 --perf_force_samples=1 --perf_verify_sanity --skip_unstable=1 --perf_threads=$PARALLEL_JOBS
+        working-directory: ${{ github.workspace }}/build
+      - name: Performance:objdetect
+        timeout-minutes: 60
+        if: ${{ always() && steps.build-opencv.outcome == 'success' && steps.check-warnings.outcome == 'success' }}
+        run: xvfb-run -a ./bin/opencv_perf_objdetect --perf_impl=plain --perf_min_samples=1 --perf_force_samples=1 --perf_verify_sanity --skip_unstable=1 --perf_threads=$PARALLEL_JOBS
+        working-directory: ${{ github.workspace }}/build
+      - name: Performance:photo
+        timeout-minutes: 60
+        if: ${{ always() && steps.build-opencv.outcome == 'success' && steps.check-warnings.outcome == 'success' }}
+        run: xvfb-run -a ./bin/opencv_perf_photo --perf_impl=plain --perf_min_samples=1 --perf_force_samples=1 --perf_verify_sanity --skip_unstable=1 --perf_threads=$PARALLEL_JOBS
+        working-directory: ${{ github.workspace }}/build
+      - name: Performance:stitching
+        timeout-minutes: 60
+        if: ${{ always() && steps.build-opencv.outcome == 'success' && steps.check-warnings.outcome == 'success' }}
+        run: xvfb-run -a ./bin/opencv_perf_stitching --perf_impl=plain --perf_min_samples=1 --perf_force_samples=1 --perf_verify_sanity --skip_unstable=1 --perf_threads=$PARALLEL_JOBS
+        working-directory: ${{ github.workspace }}/build
+      - name: Performance:video
+        timeout-minutes: 60
+        if: ${{ always() && steps.build-opencv.outcome == 'success' && steps.check-warnings.outcome == 'success' }}
+        run: xvfb-run -a ./bin/opencv_perf_video --perf_impl=plain --perf_min_samples=1 --perf_force_samples=1 --perf_verify_sanity --skip_unstable=1 --perf_threads=$PARALLEL_JOBS
+        working-directory: ${{ github.workspace }}/build
+      - name: Performance:videoio
+        timeout-minutes: 60
+        if: ${{ always() && steps.build-opencv.outcome == 'success' && steps.check-warnings.outcome == 'success' }}
+        run: xvfb-run -a ./bin/opencv_perf_videoio --perf_impl=plain --perf_min_samples=1 --perf_force_samples=1 --perf_verify_sanity --skip_unstable=1 --perf_threads=$PARALLEL_JOBS
+        working-directory: ${{ github.workspace }}/build
       - name: Python3
         timeout-minutes: 60
-        if: ${{ always() && steps.build-opencv.outcome == 'success' }}
+        if: ${{ always() && steps.build-opencv.outcome == 'success' && steps.check-warnings.outcome == 'success' }}
         run: python3 ../opencv/modules/python/test/test.py --repo ../opencv -v
         working-directory: ${{ github.workspace }}/build
       - name: Java
         timeout-minutes: 60
         id: java-test
-        if: ${{ always() && steps.build-opencv.outcome == 'success' }}
+        if: ${{ always() && steps.build-opencv.outcome == 'success' && steps.check-warnings.outcome == 'success' }}
         run: python3 ../opencv/modules/ts/misc/run.py . -a -t java
         working-directory: ${{ github.workspace }}/build
       - name: Save Unit Test Results
         timeout-minutes: 60
         uses: actions/upload-artifact@v3
-        if: ${{ always() && steps.java-test.outcome == 'success' && steps.build-opencv.outcome == 'success' }}
+        if: ${{ always() && steps.java-test.outcome == 'success' && steps.build-opencv.outcome == 'success' && steps.check-warnings.outcome == 'success' }}
         with:
           name: junit-html-macos-arm64
           path: ${{ github.workspace }}/build/java_test/testResults/junit-noframes.html

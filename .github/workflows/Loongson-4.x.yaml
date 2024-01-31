@@ -264,7 +264,7 @@ jobs:
   #         path: ${{ github.workspace }}/build/java_test/testResults/junit-noframes.html
 
   BuildContrib:
-    runs-on: [LOONGARCH64]
+    runs-on: opencv-cn-loongnix-loongarch64
     defaults:
       run:
         shell: bash

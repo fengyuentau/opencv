@@ -108,13 +108,22 @@ void warpPerspectiveLinearInvoker_8UC4(const uint8_t *src_data, size_t src_step,
                                        const double M[9], int border_type, const double border_value[4]);
 void warpPerspectiveLinearInvoker_16UC1(const uint16_t *src_data, size_t src_step, int src_rows, int src_cols,
                                         uint16_t *dst_data, size_t dst_step, int dst_rows, int dst_cols,
-                                        const double M[6], int border_type, const double border_value[4]);
+                                        const double M[9], int border_type, const double border_value[4]);
 void warpPerspectiveLinearInvoker_16UC3(const uint16_t *src_data, size_t src_step, int src_rows, int src_cols,
                                         uint16_t *dst_data, size_t dst_step, int dst_rows, int dst_cols,
-                                        const double M[6], int border_type, const double border_value[4]);
+                                        const double M[9], int border_type, const double border_value[4]);
 void warpPerspectiveLinearInvoker_16UC4(const uint16_t *src_data, size_t src_step, int src_rows, int src_cols,
                                         uint16_t *dst_data, size_t dst_step, int dst_rows, int dst_cols,
-                                        const double M[6], int border_type, const double border_value[4]);
+                                        const double M[9], int border_type, const double border_value[4]);
+void warpPerspectiveLinearInvoker_32FC1(const float *src_data, size_t src_step, int src_rows, int src_cols,
+                                        float *dst_data, size_t dst_step, int dst_rows, int dst_cols,
+                                        const double M[9], int border_type, const double border_value[4]);
+void warpPerspectiveLinearInvoker_32FC3(const float *src_data, size_t src_step, int src_rows, int src_cols,
+                                        float *dst_data, size_t dst_step, int dst_rows, int dst_cols,
+                                        const double M[9], int border_type, const double border_value[4]);
+void warpPerspectiveLinearInvoker_32FC4(const float *src_data, size_t src_step, int src_rows, int src_cols,
+                                        float *dst_data, size_t dst_step, int dst_rows, int dst_cols,
+                                        const double M[9], int border_type, const double border_value[4]);
 
 
 #ifndef CV_CPU_OPTIMIZATION_DECLARATIONS_ONLY
@@ -2550,7 +2559,7 @@ void warpPerspectiveLinearInvoker_8UC4(const uint8_t *src_data, size_t src_step,
 
 void warpPerspectiveLinearInvoker_16UC1(const uint16_t *src_data, size_t src_step, int src_rows, int src_cols,
                                         uint16_t *dst_data, size_t dst_step, int dst_rows, int dst_cols,
-                                        const double dM[6], int border_type, const double border_value[4]) {
+                                        const double dM[9], int border_type, const double border_value[4]) {
     printf("In warpPerspectiveLinearInvoker_16UC1 kernel\n");
     auto worker = [&](const Range &r) {
         CV_INSTRUMENT_REGION();
@@ -2668,7 +2677,7 @@ void warpPerspectiveLinearInvoker_16UC1(const uint16_t *src_data, size_t src_ste
 
 void warpPerspectiveLinearInvoker_16UC3(const uint16_t *src_data, size_t src_step, int src_rows, int src_cols,
                                         uint16_t *dst_data, size_t dst_step, int dst_rows, int dst_cols,
-                                        const double dM[6], int border_type, const double border_value[4]) {
+                                        const double dM[9], int border_type, const double border_value[4]) {
     printf("In warpPerspectiveLinearInvoker_16UC3 kernel\n");
     auto worker = [&](const Range &r) {
         CV_INSTRUMENT_REGION();
@@ -2791,7 +2800,7 @@ void warpPerspectiveLinearInvoker_16UC3(const uint16_t *src_data, size_t src_ste
 
 void warpPerspectiveLinearInvoker_16UC4(const uint16_t *src_data, size_t src_step, int src_rows, int src_cols,
                                         uint16_t *dst_data, size_t dst_step, int dst_rows, int dst_cols,
-                                        const double dM[6], int border_type, const double border_value[4]) {
+                                        const double dM[9], int border_type, const double border_value[4]) {
     printf("In warpPerspectiveLinearInvoker_16UC4 kernel\n");
     auto worker = [&](const Range &r) {
         CV_INSTRUMENT_REGION();
@@ -2908,6 +2917,123 @@ void warpPerspectiveLinearInvoker_16UC4(const uint16_t *src_data, size_t src_ste
                 CV_WARP_LINEAR_SCALAR_INTER_CALC_F32(C4);
 
                 CV_WARP_LINEAR_SCALAR_STORE(C4, 16U);
+            }
+        }
+    };
+    parallel_for_(Range(0, dst_rows), worker);
+}
+
+void warpPerspectiveLinearInvoker_32FC1(const float *src_data, size_t src_step, int src_rows, int src_cols,
+                                        float *dst_data, size_t dst_step, int dst_rows, int dst_cols,
+                                        const double dM[9], int border_type, const double border_value[4]) {
+    printf("In warpPerspectiveLinearInvoker_32FC1 kernel\n");
+    auto worker = [&](const Range &r) {
+        CV_INSTRUMENT_REGION();
+
+        const auto *src = src_data;
+        auto *dst = dst_data;
+        size_t srcstep = src_step/sizeof(float), dststep = dst_step/sizeof(float);
+        int srccols = src_cols, srcrows = src_rows;
+        int dstcols = dst_cols;
+        float M[9];
+        for (int i = 0; i < 9; i++) {
+            M[i] = static_cast<float>(dM[i]);
+        }
+        float bval[] = {
+            saturate_cast<float>(border_value[0]),
+            saturate_cast<float>(border_value[1]),
+            saturate_cast<float>(border_value[2]),
+            saturate_cast<float>(border_value[3]),
+        };
+        int border_type_x = border_type != BORDER_CONSTANT &&
+                            border_type != BORDER_TRANSPARENT &&
+                            srccols <= 1 ? BORDER_REPLICATE : border_type;
+        int border_type_y = border_type != BORDER_CONSTANT &&
+                            border_type != BORDER_TRANSPARENT &&
+                            srcrows <= 1 ? BORDER_REPLICATE : border_type;
+
+#if (CV_SIMD || CV_SIMD_SCALABLE)
+        constexpr int max_vlanes_32{VTraits<v_float32>::max_nlanes};
+        constexpr int max_uf{max_vlanes_32*2};
+        int vlanes_32 = VTraits<v_float32>::vlanes();
+        // unrolling_factor = lane_size / 16 = vlanes_32 * 32 / 16 = vlanes_32 * 2
+        int uf = vlanes_32 * 2;
+
+        std::array<float, max_vlanes_32> start_indices;
+        std::iota(start_indices.data(), start_indices.data() + max_vlanes_32, 0.f);
+
+        v_uint32 inner_srows = vx_setall_u32((unsigned)srcrows - 2),
+                 inner_scols = vx_setall_u32((unsigned)srccols - 1),
+                 outer_srows = vx_setall_u32((unsigned)srcrows + 1),
+                 outer_scols = vx_setall_u32((unsigned)srccols + 1);
+        v_float32 delta = vx_setall_f32(static_cast<float>(uf));
+        v_int32 one = vx_setall_s32(1);
+        v_int32 v_srcstep = vx_setall_s32(int(srcstep));
+        int32_t addr[max_uf],
+                src_ix[max_uf],
+                src_iy[max_uf];
+        float pixbuf[max_uf*4];
+
+        float bvalbuf[max_uf];
+        for (int i = 0; i < uf; i++) {
+            bvalbuf[i] = bval[0];
+        }
+        v_float32 bval_v0_l = vx_load(&bvalbuf[0]);
+        v_float32 bval_v0_h = vx_load(&bvalbuf[vlanes_32]);
+#endif
+
+        for (int y = r.start; y < r.end; y++) {
+            float* dstptr = dst + y*dststep;
+            int x = 0;
+
+#if (CV_SIMD || CV_SIMD_SCALABLE)
+            v_float32 dst_x0 = vx_load(start_indices.data());
+            v_float32 dst_x1 = v_add(dst_x0, vx_setall_f32(float(vlanes_32)));
+            v_float32 M0 = vx_setall_f32(M[0]),
+                      M3 = vx_setall_f32(M[3]),
+                      M6 = vx_setall_f32(M[6]);
+            v_float32 M_x = vx_setall_f32(static_cast<float>(y * M[1] + M[2])),
+                      M_y = vx_setall_f32(static_cast<float>(y * M[4] + M[5])),
+                      M_w = vx_setall_f32(static_cast<float>(y * M[7] + M[8]));
+
+            for (; x < dstcols - uf; x += uf) {
+                // [TODO] apply halide trick
+
+                CV_WARPPERSPECTIVE_LINEAR_VECTOR_COMPUTE_MAPPED_COORD();
+
+                v_int32 addr_0 = v_fma(v_srcstep, src_iy0, src_ix0),
+                        addr_1 = v_fma(v_srcstep, src_iy1, src_ix1);
+                vx_store(addr, addr_0);
+                vx_store(addr + vlanes_32, addr_1);
+
+                if (v_reduce_min(inner_mask) != 0) { // all loaded pixels are completely inside the image
+                    CV_WARP_LINEAR_VECTOR_SHUFFLE_ALLWITHIN(C1, 32F);
+                } else {
+                    CV_WARP_LINEAR_VECTOR_SHUFFLE_NOTALLWITHIN(C1, 32F);
+                }
+
+                CV_WARP_LINEAR_VECTOR_INTER_LOAD_F32(C1);
+
+                CV_WARP_LINEAR_VECTOR_INTER_CALC_F32(C1);
+
+                CV_WARP_LINEAR_VECTOR_INTER_STORE_F32F32(C1);
+            }
+#endif // (CV_SIMD || CV_SIMD_SCALABLE)
+
+            for (; x < dstcols; x++) {
+                float w = x*M[6] + y*M[7] + M[8];
+                float sx = (x*M[0] + y*M[1] + M[2]) / w;
+                float sy = (x*M[3] + y*M[4] + M[5]) / w;
+                int ix = cvFloor(sx), iy = cvFloor(sy);
+                sx -= ix; sy -= iy;
+                float p00g, p01g, p10g, p11g;
+                const float *srcptr = src + srcstep * iy + ix;
+
+                CV_WARP_LINEAR_SCALAR_SHUFFLE(C1);
+
+                CV_WARP_LINEAR_SCALAR_INTER_CALC_F32(C1);
+
+                CV_WARP_LINEAR_SCALAR_STORE(C1, 32F);
             }
         }
     };

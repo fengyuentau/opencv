@@ -1468,7 +1468,7 @@ void CV_WarpPerspective_Test::warpPerspective(const Mat& _src, Mat& _dst)
             return newWarpPerspective<uint8_t>(_src, _dst, M);
         } else if (dst_depth == CV_16U && (dst_channels == 1 || dst_channels == 3 || dst_channels == 4)) {
             return newWarpPerspective<uint16_t>(_src, _dst, M);
-        } else if (dst_depth == CV_32F && (dst_channels == 1 || dst_channels == 3)) {
+        } else if (dst_depth == CV_32F && (dst_channels == 1 || dst_channels == 3 || dst_channels == 4)) {
             return newWarpPerspective<float>(_src, _dst, M);
         }
     }

@@ -3289,9 +3289,9 @@ static void warpPerspective(int src_type,
                 case CV_32FC3: {
                     CV_CPU_DISPATCH(warpPerspectiveLinearInvoker_32FC3, ((const float*)src_data, src_step, src_height, src_width, (float*)dst_data, dst_step, dst_height, dst_width, M, borderType, borderValue), CV_CPU_DISPATCH_MODES_ALL);
                 }
-                // case CV_32FC4: {
-                //     CV_CPU_DISPATCH(warpPerspectiveLinearInvoker_32FC4, ((const float*)src_data, src_step, src_height, src_width, (float*)dst_data, dst_step, dst_height, dst_width, M, borderType, borderValue), CV_CPU_DISPATCH_MODES_ALL);
-                // }
+                case CV_32FC4: {
+                    CV_CPU_DISPATCH(warpPerspectiveLinearInvoker_32FC4, ((const float*)src_data, src_step, src_height, src_width, (float*)dst_data, dst_step, dst_height, dst_width, M, borderType, borderValue), CV_CPU_DISPATCH_MODES_ALL);
+                }
             }
             // no default
         }

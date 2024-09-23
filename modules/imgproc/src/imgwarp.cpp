@@ -3274,6 +3274,9 @@ static void warpPerspective(int src_type,
                 case CV_8UC4: {
                     CV_CPU_DISPATCH(warpPerspectiveLinearInvoker_8UC4, (src_data, src_step, src_height, src_width, dst_data, dst_step, dst_height, dst_width, M, borderType, borderValue), CV_CPU_DISPATCH_MODES_ALL);
                 }
+                case CV_16UC1: {
+                    CV_CPU_DISPATCH(warpPerspectiveLinearInvoker_16UC1, ((const uint16_t*)src_data, src_step, src_height, src_width, (uint16_t*)dst_data, dst_step, dst_height, dst_width, M, borderType, borderValue), CV_CPU_DISPATCH_MODES_ALL);
+                }
             }
             // no default
         }

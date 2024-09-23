@@ -2789,6 +2789,131 @@ void warpPerspectiveLinearInvoker_16UC3(const uint16_t *src_data, size_t src_ste
     parallel_for_(Range(0, dst_rows), worker);
 }
 
+void warpPerspectiveLinearInvoker_16UC4(const uint16_t *src_data, size_t src_step, int src_rows, int src_cols,
+                                        uint16_t *dst_data, size_t dst_step, int dst_rows, int dst_cols,
+                                        const double dM[6], int border_type, const double border_value[4]) {
+    printf("In warpPerspectiveLinearInvoker_16UC4 kernel\n");
+    auto worker = [&](const Range &r) {
+        CV_INSTRUMENT_REGION();
+
+        const auto *src = src_data;
+        auto *dst = dst_data;
+        size_t srcstep = src_step/sizeof(uint16_t), dststep = dst_step/sizeof(uint16_t);
+        int srccols = src_cols, srcrows = src_rows;
+        int dstcols = dst_cols;
+        float M[9];
+        for (int i = 0; i < 9; i++) {
+            M[i] = static_cast<float>(dM[i]);
+        }
+        uint16_t bval[] = {
+            saturate_cast<uint16_t>(border_value[0]),
+            saturate_cast<uint16_t>(border_value[1]),
+            saturate_cast<uint16_t>(border_value[2]),
+            saturate_cast<uint16_t>(border_value[3]),
+        };
+        int border_type_x = border_type != BORDER_CONSTANT &&
+                            border_type != BORDER_TRANSPARENT &&
+                            srccols <= 1 ? BORDER_REPLICATE : border_type;
+        int border_type_y = border_type != BORDER_CONSTANT &&
+                            border_type != BORDER_TRANSPARENT &&
+                            srcrows <= 1 ? BORDER_REPLICATE : border_type;
+
+#if (CV_SIMD || CV_SIMD_SCALABLE)
+        constexpr int max_vlanes_32{VTraits<v_float32>::max_nlanes};
+        constexpr int max_uf{max_vlanes_32*2};
+        int vlanes_32 = VTraits<v_float32>::vlanes();
+        // unrolling_factor = lane_size / 16 = vlanes_32 * 32 / 16 = vlanes_32 * 2
+        int uf = vlanes_32 * 2;
+
+        std::array<float, max_vlanes_32> start_indices;
+        std::iota(start_indices.data(), start_indices.data() + max_vlanes_32, 0.f);
+
+        v_uint32 inner_srows = vx_setall_u32((unsigned)srcrows - 2),
+                 inner_scols = vx_setall_u32((unsigned)srccols - 1),
+                 outer_srows = vx_setall_u32((unsigned)srcrows + 1),
+                 outer_scols = vx_setall_u32((unsigned)srccols + 1);
+        v_float32 delta = vx_setall_f32(static_cast<float>(uf));
+        v_int32 one = vx_setall_s32(1), four = vx_setall_s32(4);
+        v_int32 v_srcstep = vx_setall_s32(int(srcstep));
+        int32_t addr[max_uf],
+                src_ix[max_uf],
+                src_iy[max_uf];
+        uint16_t pixbuf[max_uf*4*4];
+
+        uint16_t bvalbuf[max_uf*4];
+        for (int i = 0; i < uf; i++) {
+            bvalbuf[i*4] = bval[0];
+            bvalbuf[i*4+1] = bval[1];
+            bvalbuf[i*4+2] = bval[2];
+            bvalbuf[i*4+3] = bval[3];
+        }
+        v_uint16 bval_v0 = vx_load(&bvalbuf[0]);
+        v_uint16 bval_v1 = vx_load(&bvalbuf[uf]);
+        v_uint16 bval_v2 = vx_load(&bvalbuf[uf*2]);
+        v_uint16 bval_v3 = vx_load(&bvalbuf[uf*3]);
+#endif
+
+        for (int y = r.start; y < r.end; y++) {
+            uint16_t* dstptr = dst + y*dststep;
+            int x = 0;
+
+#if (CV_SIMD || CV_SIMD_SCALABLE)
+            v_float32 dst_x0 = vx_load(start_indices.data());
+            v_float32 dst_x1 = v_add(dst_x0, vx_setall_f32(float(vlanes_32)));
+            v_float32 M0 = vx_setall_f32(M[0]),
+                      M3 = vx_setall_f32(M[3]),
+                      M6 = vx_setall_f32(M[6]);
+            v_float32 M_x = vx_setall_f32(static_cast<float>(y * M[1] + M[2])),
+                      M_y = vx_setall_f32(static_cast<float>(y * M[4] + M[5])),
+                      M_w = vx_setall_f32(static_cast<float>(y * M[7] + M[8]));
+
+            for (; x < dstcols - uf; x += uf) {
+                // [TODO] apply halide trick
+
+                CV_WARPPERSPECTIVE_LINEAR_VECTOR_COMPUTE_MAPPED_COORD();
+
+                v_int32 addr_0 = v_fma(v_srcstep, src_iy0, v_mul(src_ix0, four)),
+                        addr_1 = v_fma(v_srcstep, src_iy1, v_mul(src_ix1, four));
+                vx_store(addr, addr_0);
+                vx_store(addr + vlanes_32, addr_1);
+
+                if (v_reduce_min(inner_mask) != 0) { // all loaded pixels are completely inside the image
+                    CV_WARP_LINEAR_VECTOR_SHUFFLE_ALLWITHIN(C4, 16U);
+                } else {
+                    CV_WARP_LINEAR_VECTOR_SHUFFLE_NOTALLWITHIN(C4, 16U);
+                }
+
+                CV_WARP_LINEAR_VECTOR_INTER_LOAD_U16(C4);
+
+                CV_WARP_LINEAR_VECTOR_INTER_LOAD_U16F32(C4);
+
+                CV_WARP_LINEAR_VECTOR_INTER_CALC_F32(C4);
+
+                CV_WARP_LINEAR_VECTOR_INTER_STORE_F32U16(C4);
+            }
+#endif // (CV_SIMD || CV_SIMD_SCALABLE)
+
+            for (; x < dstcols; x++) {
+                float w = x*M[6] + y*M[7] + M[8];
+                float sx = (x*M[0] + y*M[1] + M[2]) / w;
+                float sy = (x*M[3] + y*M[4] + M[5]) / w;
+                int ix = cvFloor(sx), iy = cvFloor(sy);
+                sx -= ix; sy -= iy;
+                int p00r, p00g, p00b, p00a, p01r, p01g, p01b, p01a;
+                int p10r, p10g, p10b, p10a, p11r, p11g, p11b, p11a;
+                const uint16_t *srcptr = src + srcstep * iy + ix*4;
+
+                CV_WARP_LINEAR_SCALAR_SHUFFLE(C4);
+
+                CV_WARP_LINEAR_SCALAR_INTER_CALC_F32(C4);
+
+                CV_WARP_LINEAR_SCALAR_STORE(C4, 16U);
+            }
+        }
+    };
+    parallel_for_(Range(0, dst_rows), worker);
+}
+
 #endif // CV_CPU_OPTIMIZATION_DECLARATIONS_ONLY
 
 

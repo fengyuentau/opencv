@@ -302,10 +302,9 @@ void warpAffineLinearInvoker_8UC1(const uint8_t *src_data, size_t src_step, int 
                 float sy = x*M[3] + y*M[4] + M[5];
                 int ix = cvFloor(sx), iy = cvFloor(sy);
                 sx -= ix; sy -= iy;
-                int p00g, p01g, p10g, p11g;
                 const uint8_t *srcptr = src + srcstep * iy + ix;
 
-                CV_WARP_LINEAR_SCALAR_SHUFFLE(C1);
+                CV_WARP_LINEAR_SCALAR_SHUFFLE(C1, 8U);
 
                 CV_WARP_LINEAR_SCALAR_INTER_CALC_F32(C1);
 
@@ -434,11 +433,9 @@ void warpAffineLinearInvoker_8UC3(const uint8_t *src_data, size_t src_step, int 
                 float sy = x*M[3] + y*M[4] + M[5];
                 int ix = cvFloor(sx), iy = cvFloor(sy);
                 sx -= ix; sy -= iy;
-                int p00r, p00g, p00b, p01r, p01g, p01b;
-                int p10r, p10g, p10b, p11r, p11g, p11b;
                 const uint8_t* srcptr = src + srcstep*iy + ix*3;
 
-                CV_WARP_LINEAR_SCALAR_SHUFFLE(C3);
+                CV_WARP_LINEAR_SCALAR_SHUFFLE(C3, 8U);
 
                 CV_WARP_LINEAR_SCALAR_INTER_CALC_F32(C3);
 
@@ -573,11 +570,9 @@ void warpAffineLinearInvoker_8UC4(const uint8_t *src_data, size_t src_step, int 
                 float sy = x*M[3] + y*M[4] + M[5];
                 int ix = cvFloor(sx), iy = cvFloor(sy);
                 sx -= ix; sy -= iy;
-                int p00r, p00g, p00b, p00a, p01r, p01g, p01b, p01a;
-                int p10r, p10g, p10b, p10a, p11r, p11g, p11b, p11a;
                 const uint8_t* srcptr = src + srcstep*iy + ix*4;
 
-                CV_WARP_LINEAR_SCALAR_SHUFFLE(C4);
+                CV_WARP_LINEAR_SCALAR_SHUFFLE(C4, 8U);
 
                 CV_WARP_LINEAR_SCALAR_INTER_CALC_F32(C4);
 
@@ -678,10 +673,9 @@ void warpAffineLinearInvoker_16UC1(const uint16_t *src_data, size_t src_step, in
                 float sy = x*M[3] + y*M[4] + M[5];
                 int ix = cvFloor(sx), iy = cvFloor(sy);
                 sx -= ix; sy -= iy;
-                int p00g, p01g, p10g, p11g;
                 const uint16_t *srcptr = src + srcstep * iy + ix;
 
-                CV_WARP_LINEAR_SCALAR_SHUFFLE(C1);
+                CV_WARP_LINEAR_SCALAR_SHUFFLE(C1, 16U);
 
                 CV_WARP_LINEAR_SCALAR_INTER_CALC_F32(C1);
 
@@ -787,11 +781,9 @@ void warpAffineLinearInvoker_16UC3(const uint16_t *src_data, size_t src_step, in
                 float sy = x*M[3] + y*M[4] + M[5];
                 int ix = cvFloor(sx), iy = cvFloor(sy);
                 sx -= ix; sy -= iy;
-                int p00r, p00g, p00b, p01r, p01g, p01b;
-                int p10r, p10g, p10b, p11r, p11g, p11b;
                 const uint16_t *srcptr = src + srcstep * iy + ix*3;
 
-                CV_WARP_LINEAR_SCALAR_SHUFFLE(C3);
+                CV_WARP_LINEAR_SCALAR_SHUFFLE(C3, 16U);
 
                 CV_WARP_LINEAR_SCALAR_INTER_CALC_F32(C3);
 
@@ -899,11 +891,9 @@ void warpAffineLinearInvoker_16UC4(const uint16_t *src_data, size_t src_step, in
                 float sy = x*M[3] + y*M[4] + M[5];
                 int ix = cvFloor(sx), iy = cvFloor(sy);
                 sx -= ix; sy -= iy;
-                int p00r, p00g, p00b, p00a, p01r, p01g, p01b, p01a;
-                int p10r, p10g, p10b, p10a, p11r, p11g, p11b, p11a;
                 const uint16_t *srcptr = src + srcstep * iy + ix*4;
 
-                CV_WARP_LINEAR_SCALAR_SHUFFLE(C4);
+                CV_WARP_LINEAR_SCALAR_SHUFFLE(C4, 16U);
 
                 CV_WARP_LINEAR_SCALAR_INTER_CALC_F32(C4);
 
@@ -1003,10 +993,9 @@ void warpAffineLinearInvoker_32FC1(const float *src_data, size_t src_step, int s
                 float sy = x*M[3] + y*M[4] + M[5];
                 int ix = cvFloor(sx), iy = cvFloor(sy);
                 sx -= ix; sy -= iy;
-                float p00g, p01g, p10g, p11g;
                 const float *srcptr = src + srcstep * iy + ix;
 
-                CV_WARP_LINEAR_SCALAR_SHUFFLE(C1);
+                CV_WARP_LINEAR_SCALAR_SHUFFLE(C1, 32F);
 
                 CV_WARP_LINEAR_SCALAR_INTER_CALC_F32(C1);
 
@@ -1112,11 +1101,9 @@ void warpAffineLinearInvoker_32FC3(const float *src_data, size_t src_step, int s
                 float sy = x*M[3] + y*M[4] + M[5];
                 int ix = cvFloor(sx), iy = cvFloor(sy);
                 sx -= ix; sy -= iy;
-                float p00r, p00g, p00b, p01r, p01g, p01b;
-                float p10r, p10g, p10b, p11r, p11g, p11b;
                 const float *srcptr = src + srcstep * iy + ix*3;
 
-                CV_WARP_LINEAR_SCALAR_SHUFFLE(C3);
+                CV_WARP_LINEAR_SCALAR_SHUFFLE(C3, 32F);
 
                 CV_WARP_LINEAR_SCALAR_INTER_CALC_F32(C3);
 
@@ -1225,11 +1212,9 @@ void warpAffineLinearInvoker_32FC4(const float *src_data, size_t src_step, int s
                 float sy = x*M[3] + y*M[4] + M[5];
                 int ix = cvFloor(sx), iy = cvFloor(sy);
                 sx -= ix; sy -= iy;
-                float p00r, p00g, p00b, p00a, p01r, p01g, p01b, p01a;
-                float p10r, p10g, p10b, p10a, p11r, p11g, p11b, p11a;
                 const float *srcptr = src + srcstep * iy + ix*4;
 
-                CV_WARP_LINEAR_SCALAR_SHUFFLE(C4);
+                CV_WARP_LINEAR_SCALAR_SHUFFLE(C4, 32F);
 
                 CV_WARP_LINEAR_SCALAR_INTER_CALC_F32(C4);
 
@@ -1330,10 +1315,9 @@ void warpAffineLinearApproxInvoker_8UC1(const uint8_t *src_data, size_t src_step
                 float sy = x*M[3] + y*M[4] + M[5];
                 int ix = cvFloor(sx), iy = cvFloor(sy);
                 sx -= ix; sy -= iy;
-                int p00g, p01g, p10g, p11g;
                 const uint8_t *srcptr = src + srcstep * iy + ix;
 
-                CV_WARP_LINEAR_SCALAR_SHUFFLE(C1);
+                CV_WARP_LINEAR_SCALAR_SHUFFLE(C1, 8U);
 
                 CV_WARP_LINEAR_SCALAR_INTER_CALC_F32(C1);
 
@@ -1449,11 +1433,9 @@ void warpAffineLinearApproxInvoker_8UC3(const uint8_t *src_data, size_t src_step
                 float sy = x*M[3] + y*M[4] + M[5];
                 int ix = cvFloor(sx), iy = cvFloor(sy);
                 sx -= ix; sy -= iy;
-                int p00r, p00g, p00b, p01r, p01g, p01b;
-                int p10r, p10g, p10b, p11r, p11g, p11b;
                 const uint8_t *srcptr = src + srcstep * iy + ix*3;
 
-                CV_WARP_LINEAR_SCALAR_SHUFFLE(C3);
+                CV_WARP_LINEAR_SCALAR_SHUFFLE(C3, 8U);
 
                 CV_WARP_LINEAR_SCALAR_INTER_CALC_F32(C3);
 
@@ -1572,11 +1554,9 @@ void warpAffineLinearApproxInvoker_8UC4(const uint8_t *src_data, size_t src_step
                 float sy = x*M[3] + y*M[4] + M[5];
                 int ix = cvFloor(sx), iy = cvFloor(sy);
                 sx -= ix; sy -= iy;
-                int p00r, p00g, p00b, p00a, p01r, p01g, p01b, p01a;
-                int p10r, p10g, p10b, p10a, p11r, p11g, p11b, p11a;
                 const uint8_t *srcptr = src + srcstep * iy + ix*4;
 
-                CV_WARP_LINEAR_SCALAR_SHUFFLE(C4);
+                CV_WARP_LINEAR_SCALAR_SHUFFLE(C4, 8U);
 
                 CV_WARP_LINEAR_SCALAR_INTER_CALC_F32(C4);
 
@@ -1702,10 +1682,9 @@ void warpPerspectiveLinearInvoker_8UC1(const uint8_t *src_data, size_t src_step,
                 float sy = (x*M[3] + y*M[4] + M[5]) / w;
                 int ix = cvFloor(sx), iy = cvFloor(sy);
                 sx -= ix; sy -= iy;
-                int p00g, p01g, p10g, p11g;
                 const uint8_t *srcptr = src + srcstep * iy + ix;
 
-                CV_WARP_LINEAR_SCALAR_SHUFFLE(C1);
+                CV_WARP_LINEAR_SCALAR_SHUFFLE(C1, 8U);
 
                 CV_WARP_LINEAR_SCALAR_INTER_CALC_F32(C1);
 
@@ -1836,11 +1815,9 @@ void warpPerspectiveLinearInvoker_8UC3(const uint8_t *src_data, size_t src_step,
                 float sy = (x*M[3] + y*M[4] + M[5]) / w;
                 int ix = cvFloor(sx), iy = cvFloor(sy);
                 sx -= ix; sy -= iy;
-                int p00r, p00g, p00b, p01r, p01g, p01b;
-                int p10r, p10g, p10b, p11r, p11g, p11b;
                 const uint8_t *srcptr = src + srcstep * iy + ix*3;
 
-                CV_WARP_LINEAR_SCALAR_SHUFFLE(C3);
+                CV_WARP_LINEAR_SCALAR_SHUFFLE(C3, 8U);
 
                 CV_WARP_LINEAR_SCALAR_INTER_CALC_F32(C3);
 
@@ -1975,11 +1952,9 @@ void warpPerspectiveLinearInvoker_8UC4(const uint8_t *src_data, size_t src_step,
                 float sy = (x*M[3] + y*M[4] + M[5]) / w;
                 int ix = cvFloor(sx), iy = cvFloor(sy);
                 sx -= ix; sy -= iy;
-                int p00r, p00g, p00b, p00a, p01r, p01g, p01b, p01a;
-                int p10r, p10g, p10b, p10a, p11r, p11g, p11b, p11a;
                 const uint8_t *srcptr = src + srcstep * iy + ix*4;
 
-                CV_WARP_LINEAR_SCALAR_SHUFFLE(C4);
+                CV_WARP_LINEAR_SCALAR_SHUFFLE(C4, 8U);
 
                 CV_WARP_LINEAR_SCALAR_INTER_CALC_F32(C4);
 
@@ -2081,10 +2056,9 @@ void warpPerspectiveLinearInvoker_16UC1(const uint16_t *src_data, size_t src_ste
                 float sy = (x*M[3] + y*M[4] + M[5]) / w;
                 int ix = cvFloor(sx), iy = cvFloor(sy);
                 sx -= ix; sy -= iy;
-                int p00g, p01g, p10g, p11g;
                 const uint16_t *srcptr = src + srcstep * iy + ix;
 
-                CV_WARP_LINEAR_SCALAR_SHUFFLE(C1);
+                CV_WARP_LINEAR_SCALAR_SHUFFLE(C1, 16U);
 
                 CV_WARP_LINEAR_SCALAR_INTER_CALC_F32(C1);
 
@@ -2190,11 +2164,9 @@ void warpPerspectiveLinearInvoker_16UC3(const uint16_t *src_data, size_t src_ste
                 float sy = (x*M[3] + y*M[4] + M[5]) / w;
                 int ix = cvFloor(sx), iy = cvFloor(sy);
                 sx -= ix; sy -= iy;
-                int p00r, p00g, p00b, p01r, p01g, p01b;
-                int p10r, p10g, p10b, p11r, p11g, p11b;
                 const uint16_t *srcptr = src + srcstep * iy + ix*3;
 
-                CV_WARP_LINEAR_SCALAR_SHUFFLE(C3);
+                CV_WARP_LINEAR_SCALAR_SHUFFLE(C3, 16U);
 
                 CV_WARP_LINEAR_SCALAR_INTER_CALC_F32(C3);
 
@@ -2302,11 +2274,9 @@ void warpPerspectiveLinearInvoker_16UC4(const uint16_t *src_data, size_t src_ste
                 float sy = (x*M[3] + y*M[4] + M[5]) / w;
                 int ix = cvFloor(sx), iy = cvFloor(sy);
                 sx -= ix; sy -= iy;
-                int p00r, p00g, p00b, p00a, p01r, p01g, p01b, p01a;
-                int p10r, p10g, p10b, p10a, p11r, p11g, p11b, p11a;
                 const uint16_t *srcptr = src + srcstep * iy + ix*4;
 
-                CV_WARP_LINEAR_SCALAR_SHUFFLE(C4);
+                CV_WARP_LINEAR_SCALAR_SHUFFLE(C4, 16U);
 
                 CV_WARP_LINEAR_SCALAR_INTER_CALC_F32(C4);
 
@@ -2407,10 +2377,9 @@ void warpPerspectiveLinearInvoker_32FC1(const float *src_data, size_t src_step, 
                 float sy = (x*M[3] + y*M[4] + M[5]) / w;
                 int ix = cvFloor(sx), iy = cvFloor(sy);
                 sx -= ix; sy -= iy;
-                float p00g, p01g, p10g, p11g;
                 const float *srcptr = src + srcstep * iy + ix;
 
-                CV_WARP_LINEAR_SCALAR_SHUFFLE(C1);
+                CV_WARP_LINEAR_SCALAR_SHUFFLE(C1, 32F);
 
                 CV_WARP_LINEAR_SCALAR_INTER_CALC_F32(C1);
 
@@ -2517,11 +2486,9 @@ void warpPerspectiveLinearInvoker_32FC3(const float *src_data, size_t src_step, 
                 float sy = (x*M[3] + y*M[4] + M[5]) / w;
                 int ix = cvFloor(sx), iy = cvFloor(sy);
                 sx -= ix; sy -= iy;
-                float p00r, p00g, p00b, p01r, p01g, p01b;
-                float p10r, p10g, p10b, p11r, p11g, p11b;
                 const float *srcptr = src + srcstep * iy + ix*3;
 
-                CV_WARP_LINEAR_SCALAR_SHUFFLE(C3);
+                CV_WARP_LINEAR_SCALAR_SHUFFLE(C3, 32F);
 
                 CV_WARP_LINEAR_SCALAR_INTER_CALC_F32(C3);
 
@@ -2631,11 +2598,9 @@ void warpPerspectiveLinearInvoker_32FC4(const float *src_data, size_t src_step, 
                 float sy = (x*M[3] + y*M[4] + M[5]) / w;
                 int ix = cvFloor(sx), iy = cvFloor(sy);
                 sx -= ix; sy -= iy;
-                float p00r, p00g, p00b, p00a, p01r, p01g, p01b, p01a;
-                float p10r, p10g, p10b, p10a, p11r, p11g, p11b, p11a;
                 const float *srcptr = src + srcstep * iy + ix*4;
 
-                CV_WARP_LINEAR_SCALAR_SHUFFLE(C4);
+                CV_WARP_LINEAR_SCALAR_SHUFFLE(C4, 32F);
 
                 CV_WARP_LINEAR_SCALAR_INTER_CALC_F32(C4);
 
@@ -2737,10 +2702,9 @@ void warpPerspectiveLinearApproxInvoker_8UC1(const uint8_t *src_data, size_t src
                 float sy = (x*M[3] + y*M[4] + M[5]) / w;
                 int ix = cvFloor(sx), iy = cvFloor(sy);
                 sx -= ix; sy -= iy;
-                int p00g, p01g, p10g, p11g;
                 const uint8_t *srcptr = src + srcstep * iy + ix;
 
-                CV_WARP_LINEAR_SCALAR_SHUFFLE(C1);
+                CV_WARP_LINEAR_SCALAR_SHUFFLE(C1, 8U);
 
                 CV_WARP_LINEAR_SCALAR_INTER_CALC_F32(C1);
 
@@ -2857,11 +2821,9 @@ void warpPerspectiveLinearApproxInvoker_8UC3(const uint8_t *src_data, size_t src
                 float sy = (x*M[3] + y*M[4] + M[5]) / w;
                 int ix = cvFloor(sx), iy = cvFloor(sy);
                 sx -= ix; sy -= iy;
-                int p00r, p00g, p00b, p01r, p01g, p01b;
-                int p10r, p10g, p10b, p11r, p11g, p11b;
                 const uint8_t *srcptr = src + srcstep * iy + ix*3;
 
-                CV_WARP_LINEAR_SCALAR_SHUFFLE(C3);
+                CV_WARP_LINEAR_SCALAR_SHUFFLE(C3, 8U);
 
                 CV_WARP_LINEAR_SCALAR_INTER_CALC_F32(C3);
 
@@ -2980,11 +2942,9 @@ void warpPerspectiveLinearApproxInvoker_8UC4(const uint8_t *src_data, size_t src
                 float sy = (x*M[3] + y*M[4] + M[5]) / w;
                 int ix = cvFloor(sx), iy = cvFloor(sy);
                 sx -= ix; sy -= iy;
-                int p00r, p00g, p00b, p00a, p01r, p01g, p01b, p01a;
-                int p10r, p10g, p10b, p10a, p11r, p11g, p11b, p11a;
                 const uint8_t *srcptr = src + srcstep * iy + ix*4;
 
-                CV_WARP_LINEAR_SCALAR_SHUFFLE(C4);
+                CV_WARP_LINEAR_SCALAR_SHUFFLE(C4, 8U);
 
                 CV_WARP_LINEAR_SCALAR_INTER_CALC_F32(C4);
 

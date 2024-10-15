@@ -3,6 +3,26 @@
 // of this distribution and at http://opencv.org/license.html.
 
 // Shuffle
+#define CV_WARP_LINEAR_SCALAR_SHUFFLE_DEF(cn, dtype) \
+    dtype p00##cn, p01##cn, p10##cn, p11##cn;
+#define CV_WARP_LINEAR_SCALAR_SHUFFLE_DEF_C1(dtype) \
+    CV_WARP_LINEAR_SCALAR_SHUFFLE_DEF(g, dtype)
+#define CV_WARP_LINEAR_SCALAR_SHUFFLE_DEF_C3(dtype) \
+    CV_WARP_LINEAR_SCALAR_SHUFFLE_DEF(r, dtype) \
+    CV_WARP_LINEAR_SCALAR_SHUFFLE_DEF(g, dtype) \
+    CV_WARP_LINEAR_SCALAR_SHUFFLE_DEF(b, dtype)
+#define CV_WARP_LINEAR_SCALAR_SHUFFLE_DEF_C4(dtype) \
+    CV_WARP_LINEAR_SCALAR_SHUFFLE_DEF(r, dtype) \
+    CV_WARP_LINEAR_SCALAR_SHUFFLE_DEF(g, dtype) \
+    CV_WARP_LINEAR_SCALAR_SHUFFLE_DEF(b, dtype) \
+    CV_WARP_LINEAR_SCALAR_SHUFFLE_DEF(a, dtype)
+#define CV_WARP_LINEAR_SCALAR_SHUFFLE_DEF_8U(CN) \
+    CV_WARP_LINEAR_SCALAR_SHUFFLE_DEF_##CN(int)
+#define CV_WARP_LINEAR_SCALAR_SHUFFLE_DEF_16U(CN) \
+    CV_WARP_LINEAR_SCALAR_SHUFFLE_DEF_##CN(int)
+#define CV_WARP_LINEAR_SCALAR_SHUFFLE_DEF_32F(CN) \
+    CV_WARP_LINEAR_SCALAR_SHUFFLE_DEF_##CN(float)
+
 #define CV_WARP_LINEAR_SCALAR_SHUFFLE_LOAD(CN, cn, i) \
     p00##CN = srcptr[i]; p01##CN = srcptr[i + cn]; \
     p10##CN = srcptr[srcstep + i]; p11##CN = srcptr[srcstep + cn + i];
@@ -93,7 +113,8 @@
         pxy##a = src[glob_ofs+3]; \
     }
 
-#define CV_WARP_LINEAR_SCALAR_SHUFFLE(CN) \
+#define CV_WARP_LINEAR_SCALAR_SHUFFLE(CN, DEPTH) \
+    CV_WARP_LINEAR_SCALAR_SHUFFLE_DEF_##DEPTH(CN); \
     if ((((unsigned)ix < (unsigned)(srccols-1)) & \
         ((unsigned)iy < (unsigned)(srcrows-1))) != 0) { \
         CV_WARP_LINEAR_SCALAR_SHUFFLE_LOAD_##CN() \

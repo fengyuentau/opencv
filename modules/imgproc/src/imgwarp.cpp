@@ -1716,6 +1716,18 @@ void cv::remap( InputArray _src, OutputArray _dst,
                     CV_CPU_DISPATCH(remapLinearInvoker_8UC4, (src_data, src_step, src_rows, src_cols, dst_data, dst_step, dst_rows, dst_cols, borderType, borderValue.val, map1_data, map2_data), CV_CPU_DISPATCH_MODES_ALL);
                     break;
                 }
+                case CV_16UC1: {
+                    CV_CPU_DISPATCH(remapLinearInvoker_16UC1, ((uint16_t*)src_data, src_step, src_rows, src_cols, (uint16_t*)dst_data, dst_step, dst_rows, dst_cols, borderType, borderValue.val, map1_data, map2_data), CV_CPU_DISPATCH_MODES_ALL);
+                    break;
+                }
+                case CV_16UC3: {
+                    CV_CPU_DISPATCH(remapLinearInvoker_16UC3, ((uint16_t*)src_data, src_step, src_rows, src_cols, (uint16_t*)dst_data, dst_step, dst_rows, dst_cols, borderType, borderValue.val, map1_data, map2_data), CV_CPU_DISPATCH_MODES_ALL);
+                    break;
+                }
+                case CV_16UC4: {
+                    CV_CPU_DISPATCH(remapLinearInvoker_16UC4, ((uint16_t*)src_data, src_step, src_rows, src_cols, (uint16_t*)dst_data, dst_step, dst_rows, dst_cols, borderType, borderValue.val, map1_data, map2_data), CV_CPU_DISPATCH_MODES_ALL);
+                    break;
+                }
                 // no default
             }
         }

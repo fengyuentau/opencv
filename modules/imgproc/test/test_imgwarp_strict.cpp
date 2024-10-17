@@ -893,6 +893,10 @@ void CV_Remap_Test::run_reference_func()
             new_remap<uint8_t>(src, tmp);
             tmp.convertTo(reference_dst, reference_dst.depth());
             return;
+        } else if (src_depth == CV_16U && (src_channels == 1 || src_channels == 3 || src_channels == 4)) {
+            new_remap<uint16_t>(src, tmp);
+            tmp.convertTo(reference_dst, reference_dst.depth());
+            return;
         }
     }
 

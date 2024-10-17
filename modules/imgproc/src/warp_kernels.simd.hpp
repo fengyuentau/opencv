@@ -2941,20 +2941,34 @@ void remapLinearInvoker_8UC1(const uint8_t *src_data, size_t src_step, int src_r
                             border_type != BORDER_TRANSPARENT &&
                             srcrows <= 1 ? BORDER_REPLICATE : border_type;
 
+        /*
+        map1 & map2: CV_32FC1
+            offset = y*dstcols + x
+            sx = map1_data[offset]
+            sy = map2_data[offset]
+        map1: CV_32FC2
+            offset = 2*(y*dstcols + x)
+            sx = map1_data[offset]
+            sy = map1_data[offset+1]
+        */
         for (int y = r.start; y < r.end; y++) {
             uint8_t* dstptr = dst + y*dststep;
+            const float *sx_data = map1_data + y*dstcols;
+            const float *sy_data = map2_data + y*dstcols;
+            if (map2_data == nullptr) {
+                sx_data += y*dstcols;
+                sy_data = sx_data;
+            }
             int x = 0;
 
             for (; x < dstcols; x++) {
-                size_t offset = y * dstcols + x;
                 float sx, sy;
-                if (map2_data != nullptr) {
-                    sx = map1_data[offset];
-                    sy = map2_data[offset];
+                if (map2_data == nullptr) {
+                    sx = sx_data[2*x];
+                    sy = sy_data[2*x+1];
                 } else {
-                    offset *= 2;
-                    sx = map1_data[offset];
-                    sy = map1_data[offset+1];
+                    sx = sx_data[x];
+                    sy = sy_data[x];
                 }
 
                 CV_WARP_LINEAR_SCALAR_SHUFFLE(C1, 8U);
@@ -2995,18 +3009,22 @@ void remapLinearInvoker_8UC3(const uint8_t *src_data, size_t src_step, int src_r
 
         for (int y = r.start; y < r.end; y++) {
             uint8_t* dstptr = dst + y*dststep;
+            const float *sx_data = map1_data + y*dstcols;
+            const float *sy_data = map2_data + y*dstcols;
+            if (map2_data == nullptr) {
+                sx_data += y*dstcols;
+                sy_data = sx_data;
+            }
             int x = 0;
 
             for (; x < dstcols; x++) {
-                size_t offset = y * dstcols + x;
                 float sx, sy;
-                if (map2_data != nullptr) {
-                    sx = map1_data[offset];
-                    sy = map2_data[offset];
+                if (map2_data == nullptr) {
+                    sx = sx_data[2*x];
+                    sy = sy_data[2*x+1];
                 } else {
-                    offset *= 2;
-                    sx = map1_data[offset];
-                    sy = map1_data[offset+1];
+                    sx = sx_data[x];
+                    sy = sy_data[x];
                 }
 
                 CV_WARP_LINEAR_SCALAR_SHUFFLE(C3, 8U);
@@ -3048,18 +3066,22 @@ void remapLinearInvoker_8UC4(const uint8_t *src_data, size_t src_step, int src_r
 
         for (int y = r.start; y < r.end; y++) {
             uint8_t* dstptr = dst + y*dststep;
+            const float *sx_data = map1_data + y*dstcols;
+            const float *sy_data = map2_data + y*dstcols;
+            if (map2_data == nullptr) {
+                sx_data += y*dstcols;
+                sy_data = sx_data;
+            }
             int x = 0;
 
             for (; x < dstcols; x++) {
-                size_t offset = y * dstcols + x;
                 float sx, sy;
-                if (map2_data != nullptr) {
-                    sx = map1_data[offset];
-                    sy = map2_data[offset];
+                if (map2_data == nullptr) {
+                    sx = sx_data[2*x];
+                    sy = sy_data[2*x+1];
                 } else {
-                    offset *= 2;
-                    sx = map1_data[offset];
-                    sy = map1_data[offset+1];
+                    sx = sx_data[x];
+                    sy = sy_data[x];
                 }
 
                 CV_WARP_LINEAR_SCALAR_SHUFFLE(C4, 8U);
@@ -3101,18 +3123,22 @@ void remapLinearInvoker_16UC1(const uint16_t *src_data, size_t src_step, int src
 
         for (int y = r.start; y < r.end; y++) {
             uint16_t* dstptr = dst + y*dststep;
+            const float *sx_data = map1_data + y*dstcols;
+            const float *sy_data = map2_data + y*dstcols;
+            if (map2_data == nullptr) {
+                sx_data += y*dstcols;
+                sy_data = sx_data;
+            }
             int x = 0;
 
             for (; x < dstcols; x++) {
-                size_t offset = y * dstcols + x;
                 float sx, sy;
-                if (map2_data != nullptr) {
-                    sx = map1_data[offset];
-                    sy = map2_data[offset];
+                if (map2_data == nullptr) {
+                    sx = sx_data[2*x];
+                    sy = sy_data[2*x+1];
                 } else {
-                    offset *= 2;
-                    sx = map1_data[offset];
-                    sy = map1_data[offset+1];
+                    sx = sx_data[x];
+                    sy = sy_data[x];
                 }
 
                 CV_WARP_LINEAR_SCALAR_SHUFFLE(C1, 16U);
@@ -3154,18 +3180,22 @@ void remapLinearInvoker_16UC3(const uint16_t *src_data, size_t src_step, int src
 
         for (int y = r.start; y < r.end; y++) {
             uint16_t* dstptr = dst + y*dststep;
+            const float *sx_data = map1_data + y*dstcols;
+            const float *sy_data = map2_data + y*dstcols;
+            if (map2_data == nullptr) {
+                sx_data += y*dstcols;
+                sy_data = sx_data;
+            }
             int x = 0;
 
             for (; x < dstcols; x++) {
-                size_t offset = y * dstcols + x;
                 float sx, sy;
-                if (map2_data != nullptr) {
-                    sx = map1_data[offset];
-                    sy = map2_data[offset];
+                if (map2_data == nullptr) {
+                    sx = sx_data[2*x];
+                    sy = sy_data[2*x+1];
                 } else {
-                    offset *= 2;
-                    sx = map1_data[offset];
-                    sy = map1_data[offset+1];
+                    sx = sx_data[x];
+                    sy = sy_data[x];
                 }
 
                 CV_WARP_LINEAR_SCALAR_SHUFFLE(C3, 16U);
@@ -3207,18 +3237,22 @@ void remapLinearInvoker_16UC4(const uint16_t *src_data, size_t src_step, int src
 
         for (int y = r.start; y < r.end; y++) {
             uint16_t* dstptr = dst + y*dststep;
+            const float *sx_data = map1_data + y*dstcols;
+            const float *sy_data = map2_data + y*dstcols;
+            if (map2_data == nullptr) {
+                sx_data += y*dstcols;
+                sy_data = sx_data;
+            }
             int x = 0;
 
             for (; x < dstcols; x++) {
-                size_t offset = y * dstcols + x;
                 float sx, sy;
-                if (map2_data != nullptr) {
-                    sx = map1_data[offset];
-                    sy = map2_data[offset];
+                if (map2_data == nullptr) {
+                    sx = sx_data[2*x];
+                    sy = sy_data[2*x+1];
                 } else {
-                    offset *= 2;
-                    sx = map1_data[offset];
-                    sy = map1_data[offset+1];
+                    sx = sx_data[x];
+                    sy = sy_data[x];
                 }
 
                 CV_WARP_LINEAR_SCALAR_SHUFFLE(C4, 16U);
@@ -3260,18 +3294,22 @@ void remapLinearInvoker_32FC1(const float *src_data, size_t src_step, int src_ro
 
         for (int y = r.start; y < r.end; y++) {
             float* dstptr = dst + y*dststep;
+            const float *sx_data = map1_data + y*dstcols;
+            const float *sy_data = map2_data + y*dstcols;
+            if (map2_data == nullptr) {
+                sx_data += y*dstcols;
+                sy_data = sx_data;
+            }
             int x = 0;
 
             for (; x < dstcols; x++) {
-                size_t offset = y * dstcols + x;
                 float sx, sy;
-                if (map2_data != nullptr) {
-                    sx = map1_data[offset];
-                    sy = map2_data[offset];
+                if (map2_data == nullptr) {
+                    sx = sx_data[2*x];
+                    sy = sy_data[2*x+1];
                 } else {
-                    offset *= 2;
-                    sx = map1_data[offset];
-                    sy = map1_data[offset+1];
+                    sx = sx_data[x];
+                    sy = sy_data[x];
                 }
 
                 CV_WARP_LINEAR_SCALAR_SHUFFLE(C1, 32F);
@@ -3313,18 +3351,22 @@ void remapLinearInvoker_32FC3(const float *src_data, size_t src_step, int src_ro
 
         for (int y = r.start; y < r.end; y++) {
             float* dstptr = dst + y*dststep;
+            const float *sx_data = map1_data + y*dstcols;
+            const float *sy_data = map2_data + y*dstcols;
+            if (map2_data == nullptr) {
+                sx_data += y*dstcols;
+                sy_data = sx_data;
+            }
             int x = 0;
 
             for (; x < dstcols; x++) {
-                size_t offset = y * dstcols + x;
                 float sx, sy;
-                if (map2_data != nullptr) {
-                    sx = map1_data[offset];
-                    sy = map2_data[offset];
+                if (map2_data == nullptr) {
+                    sx = sx_data[2*x];
+                    sy = sy_data[2*x+1];
                 } else {
-                    offset *= 2;
-                    sx = map1_data[offset];
-                    sy = map1_data[offset+1];
+                    sx = sx_data[x];
+                    sy = sy_data[x];
                 }
 
                 CV_WARP_LINEAR_SCALAR_SHUFFLE(C3, 32F);
@@ -3366,18 +3408,22 @@ void remapLinearInvoker_32FC4(const float *src_data, size_t src_step, int src_ro
 
         for (int y = r.start; y < r.end; y++) {
             float* dstptr = dst + y*dststep;
+            const float *sx_data = map1_data + y*dstcols;
+            const float *sy_data = map2_data + y*dstcols;
+            if (map2_data == nullptr) {
+                sx_data += y*dstcols;
+                sy_data = sx_data;
+            }
             int x = 0;
 
             for (; x < dstcols; x++) {
-                size_t offset = y * dstcols + x;
                 float sx, sy;
-                if (map2_data != nullptr) {
-                    sx = map1_data[offset];
-                    sy = map2_data[offset];
+                if (map2_data == nullptr) {
+                    sx = sx_data[2*x];
+                    sy = sy_data[2*x+1];
                 } else {
-                    offset *= 2;
-                    sx = map1_data[offset];
-                    sy = map1_data[offset+1];
+                    sx = sx_data[x];
+                    sy = sy_data[x];
                 }
 
                 CV_WARP_LINEAR_SCALAR_SHUFFLE(C4, 32F);

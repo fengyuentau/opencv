@@ -1638,6 +1638,136 @@ void cv::remap( InputArray _src, OutputArray _dst,
 {
     CV_INSTRUMENT_REGION();
 
+    CV_Assert( !_map1.empty() );
+    CV_Assert( _map2.empty() || (_map2.size() == _map1.size()));
+
+    CV_OCL_RUN(_src.dims() <= 2 && _dst.isUMat(),
+               ocl_remap(_src, _dst, _map1, _map2, interpolation, borderType, borderValue))
+
+    Mat src = _src.getMat(), map1 = _map1.getMat(), map2 = _map2.getMat();
+    _dst.create( map1.size(), src.type() );
+    Mat dst = _dst.getMat();
+
+
+    CV_Assert( dst.cols < SHRT_MAX && dst.rows < SHRT_MAX && src.cols < SHRT_MAX && src.rows < SHRT_MAX );
+
+    if( dst.data == src.data )
+        src = src.clone();
+
+    if ((map1.type() == CV_32FC1) && (map2.type() == CV_32FC1))
+    {
+        CALL_HAL(remap32f, cv_hal_remap32f, src.type(), src.data, src.step, src.cols, src.rows, dst.data, dst.step, dst.cols, dst.rows,
+                 map1.ptr<float>(), map1.step, map2.ptr<float>(), map2.step, interpolation, borderType, borderValue.val);
+    }
+
+    interpolation &= ~cv::WARP_RELATIVE_MAP;
+    if( interpolation == INTER_AREA )
+        interpolation = INTER_LINEAR;
+
+    int type = src.type(), depth = CV_MAT_DEPTH(type);
+
+    if (interpolation == INTER_LINEAR) {
+        std::string typeStr;
+        switch (src.depth()) {
+            case CV_8U: typeStr = "8U"; break;
+            case CV_16U: typeStr = "16U"; break;
+            case CV_16S: typeStr = "16S"; break;
+            case CV_32F: typeStr = "32F"; break;
+            default: typeStr = "x";
+        }
+        typeStr += cv::format("C%d", src.channels());
+        std::string map1TypeStr, map2TypeStr;
+        switch (map1.depth()) {
+            case CV_8U:  map1TypeStr = "8U"; break;
+            case CV_16U: map1TypeStr = "16U"; break;
+            case CV_16S: map1TypeStr = "16S"; break;
+            case CV_32F: map1TypeStr = "32F"; break;
+            default: map1TypeStr = "x";
+        }
+        map1TypeStr += cv::format("C%d", map1.channels());
+        switch (map2.depth()) {
+            case CV_8U:  map2TypeStr = "8U"; break;
+            case CV_16U: map2TypeStr = "16U"; break;
+            case CV_16S: map2TypeStr = "16S"; break;
+            case CV_32F: map2TypeStr = "32F"; break;
+            default:     map2TypeStr = "x";
+        }
+        map2TypeStr += cv::format("C%d", map2.channels());
+        printf("inter=%d, src.type()=%s, map1.type()=%s, map2.type()=%s\n", interpolation, typeStr.c_str(), map1TypeStr.c_str(), map2TypeStr.c_str());
+
+        if (map1.depth() == CV_32F) {
+            const auto *src_data = src.ptr<const uint8_t>();
+            auto *dst_data = dst.ptr<uint8_t>();
+            size_t src_step = src.step, dst_step = dst.step;
+            int src_rows = src.rows, src_cols = src.cols;
+            int dst_rows = dst.rows, dst_cols = dst.cols;
+            const float *map1_data = map1.ptr<const float>();
+            const float *map2_data = map2.ptr<const float>();
+            switch (src.type()) {
+                case CV_8UC1: {
+                    CV_CPU_DISPATCH(remapLinearInvoker_8UC1, (src_data, src_step, src_rows, src_cols, dst_data, dst_step, dst_rows, dst_cols, borderType, borderValue.val, map1_data, map2_data), CV_CPU_DISPATCH_MODES_ALL);
+                    break;
+                }
+                case CV_8UC3: {
+                    CV_CPU_DISPATCH(remapLinearInvoker_8UC3, (src_data, src_step, src_rows, src_cols, dst_data, dst_step, dst_rows, dst_cols, borderType, borderValue.val, map1_data, map2_data), CV_CPU_DISPATCH_MODES_ALL);
+                    break;
+                }
+                case CV_8UC4: {
+                    CV_CPU_DISPATCH(remapLinearInvoker_8UC4, (src_data, src_step, src_rows, src_cols, dst_data, dst_step, dst_rows, dst_cols, borderType, borderValue.val, map1_data, map2_data), CV_CPU_DISPATCH_MODES_ALL);
+                    break;
+                }
+                // no default
+            }
+        }
+    }
+
+#if defined HAVE_IPP && !IPP_DISABLE_REMAP
+    CV_IPP_CHECK()
+    {
+        if ((interpolation == INTER_LINEAR || interpolation == INTER_CUBIC || interpolation == INTER_NEAREST) &&
+                map1.type() == CV_32FC1 && map2.type() == CV_32FC1 &&
+                (borderType == BORDER_CONSTANT || borderType == BORDER_TRANSPARENT))
+        {
+            int ippInterpolation =
+                interpolation == INTER_NEAREST ? IPPI_INTER_NN :
+                interpolation == INTER_LINEAR ? IPPI_INTER_LINEAR : IPPI_INTER_CUBIC;
+
+            ippiRemap ippFunc =
+                type == CV_8UC1 ? (ippiRemap)ippiRemap_8u_C1R :
+                type == CV_8UC3 ? (ippiRemap)ippiRemap_8u_C3R :
+                type == CV_8UC4 ? (ippiRemap)ippiRemap_8u_C4R :
+                type == CV_16UC1 ? (ippiRemap)ippiRemap_16u_C1R :
+                type == CV_16UC3 ? (ippiRemap)ippiRemap_16u_C3R :
+                type == CV_16UC4 ? (ippiRemap)ippiRemap_16u_C4R :
+                type == CV_32FC1 ? (ippiRemap)ippiRemap_32f_C1R :
+                type == CV_32FC3 ? (ippiRemap)ippiRemap_32f_C3R :
+                type == CV_32FC4 ? (ippiRemap)ippiRemap_32f_C4R : 0;
+
+            if (ippFunc)
+            {
+                bool ok;
+                IPPRemapInvoker invoker(src, dst, map1, map2, ippFunc, ippInterpolation,
+                                        borderType, borderValue, &ok);
+                Range range(0, dst.rows);
+                parallel_for_(range, invoker, dst.total() / (double)(1 << 16));
+
+                if (ok)
+                {
+                    CV_IMPL_ADD(CV_IMPL_IPP|CV_IMPL_MT);
+                    return;
+                }
+                setIppErrorStatus();
+            }
+        }
+    }
+#endif
+
+    RemapNNFunc nnfunc = 0;
+    RemapFunc ifunc = 0;
+    const void* ctab = 0;
+    bool fixpt = depth == CV_8U;
+    bool planar_input = false;
+
     const bool hasRelativeFlag = ((interpolation & cv::WARP_RELATIVE_MAP) != 0);
 
     static RemapNNFunc nn_tab[2][CV_DEPTH_MAX] =
@@ -1686,7 +1816,7 @@ void cv::remap( InputArray _src, OutputArray _dst,
             remapBicubic<Cast<float, float>, float, 1, true>,
             remapBicubic<Cast<double, double>, float, 1, true>, 0
         }
-};
+    };
 
     static RemapFunc lanczos4_tab[2][8] =
     {
@@ -1704,82 +1834,7 @@ void cv::remap( InputArray _src, OutputArray _dst,
             remapLanczos4<Cast<float, float>, float, 1, true>,
             remapLanczos4<Cast<double, double>, float, 1, true>, 0
         }
-};
-
-    CV_Assert( !_map1.empty() );
-    CV_Assert( _map2.empty() || (_map2.size() == _map1.size()));
-
-    CV_OCL_RUN(_src.dims() <= 2 && _dst.isUMat(),
-               ocl_remap(_src, _dst, _map1, _map2, interpolation, borderType, borderValue))
-
-    Mat src = _src.getMat(), map1 = _map1.getMat(), map2 = _map2.getMat();
-    _dst.create( map1.size(), src.type() );
-    Mat dst = _dst.getMat();
-
-
-    CV_Assert( dst.cols < SHRT_MAX && dst.rows < SHRT_MAX && src.cols < SHRT_MAX && src.rows < SHRT_MAX );
-
-    if( dst.data == src.data )
-        src = src.clone();
-
-    if ((map1.type() == CV_32FC1) && (map2.type() == CV_32FC1))
-    {
-        CALL_HAL(remap32f, cv_hal_remap32f, src.type(), src.data, src.step, src.cols, src.rows, dst.data, dst.step, dst.cols, dst.rows,
-                 map1.ptr<float>(), map1.step, map2.ptr<float>(), map2.step, interpolation, borderType, borderValue.val);
-    }
-
-    interpolation &= ~cv::WARP_RELATIVE_MAP;
-    if( interpolation == INTER_AREA )
-        interpolation = INTER_LINEAR;
-
-    int type = src.type(), depth = CV_MAT_DEPTH(type);
-
-#if defined HAVE_IPP && !IPP_DISABLE_REMAP
-    CV_IPP_CHECK()
-    {
-        if ((interpolation == INTER_LINEAR || interpolation == INTER_CUBIC || interpolation == INTER_NEAREST) &&
-                map1.type() == CV_32FC1 && map2.type() == CV_32FC1 &&
-                (borderType == BORDER_CONSTANT || borderType == BORDER_TRANSPARENT))
-        {
-            int ippInterpolation =
-                interpolation == INTER_NEAREST ? IPPI_INTER_NN :
-                interpolation == INTER_LINEAR ? IPPI_INTER_LINEAR : IPPI_INTER_CUBIC;
-
-            ippiRemap ippFunc =
-                type == CV_8UC1 ? (ippiRemap)ippiRemap_8u_C1R :
-                type == CV_8UC3 ? (ippiRemap)ippiRemap_8u_C3R :
-                type == CV_8UC4 ? (ippiRemap)ippiRemap_8u_C4R :
-                type == CV_16UC1 ? (ippiRemap)ippiRemap_16u_C1R :
-                type == CV_16UC3 ? (ippiRemap)ippiRemap_16u_C3R :
-                type == CV_16UC4 ? (ippiRemap)ippiRemap_16u_C4R :
-                type == CV_32FC1 ? (ippiRemap)ippiRemap_32f_C1R :
-                type == CV_32FC3 ? (ippiRemap)ippiRemap_32f_C3R :
-                type == CV_32FC4 ? (ippiRemap)ippiRemap_32f_C4R : 0;
-
-            if (ippFunc)
-            {
-                bool ok;
-                IPPRemapInvoker invoker(src, dst, map1, map2, ippFunc, ippInterpolation,
-                                        borderType, borderValue, &ok);
-                Range range(0, dst.rows);
-                parallel_for_(range, invoker, dst.total() / (double)(1 << 16));
-
-                if (ok)
-                {
-                    CV_IMPL_ADD(CV_IMPL_IPP|CV_IMPL_MT);
-                    return;
-                }
-                setIppErrorStatus();
-            }
-        }
-    }
-#endif
-
-    RemapNNFunc nnfunc = 0;
-    RemapFunc ifunc = 0;
-    const void* ctab = 0;
-    bool fixpt = depth == CV_8U;
-    bool planar_input = false;
+    };
 
     const int relativeOptionIndex = (hasRelativeFlag ? 1 : 0);
     if( interpolation == INTER_NEAREST )

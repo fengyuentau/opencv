@@ -162,6 +162,16 @@ void warpPerspectiveLinearApproxInvoker_8UC4(const uint8_t *src_data, size_t src
                                              uint8_t *dst_data, size_t dst_step, int dst_rows, int dst_cols,
                                              const double M[9], int border_type, const double border_value[4]);
 
+void remapLinearInvoker_8UC1(const uint8_t *src_data, size_t src_step, int src_rows, int src_cols,
+                             uint8_t *dst_data, size_t dst_step, int dst_rows, int dst_cols,
+                             int border_type, const double border_value[4], const float *map1_data, const float *map2_data);
+void remapLinearInvoker_8UC3(const uint8_t *src_data, size_t src_step, int src_rows, int src_cols,
+                             uint8_t *dst_data, size_t dst_step, int dst_rows, int dst_cols,
+                             int border_type, const double border_value[4], const float *map1_data, const float *map2_data);
+void remapLinearInvoker_8UC4(const uint8_t *src_data, size_t src_step, int src_rows, int src_cols,
+                             uint8_t *dst_data, size_t dst_step, int dst_rows, int dst_cols,
+                             int border_type, const double border_value[4], const float *map1_data, const float *map2_data);
+
 #ifndef CV_CPU_OPTIMIZATION_DECLARATIONS_ONLY
 
 namespace {
@@ -2886,6 +2896,163 @@ void warpPerspectiveLinearApproxInvoker_8UC4(const uint8_t *src_data, size_t src
                                       dst_data, dst_step, dst_rows, dst_cols,
                                       dM, border_type, border_value);
 #endif
+}
+
+void remapLinearInvoker_8UC1(const uint8_t *src_data, size_t src_step, int src_rows, int src_cols,
+                             uint8_t *dst_data, size_t dst_step, int dst_rows, int dst_cols,
+                             int border_type, const double border_value[4], const float *map1_data, const float *map2_data) {
+    printf("In remapLinearInvoker_8UC1\n");
+    auto worker = [&](const Range &r) {
+        CV_INSTRUMENT_REGION();
+
+        const auto *src = src_data;
+        auto *dst = dst_data;
+        size_t srcstep = src_step, dststep = dst_step;
+        int srccols = src_cols, srcrows = src_rows;
+        int dstcols = dst_cols;
+        uint8_t bval[] = {
+            saturate_cast<uint8_t>(border_value[0]),
+            saturate_cast<uint8_t>(border_value[1]),
+            saturate_cast<uint8_t>(border_value[2]),
+            saturate_cast<uint8_t>(border_value[3]),
+        };
+        int border_type_x = border_type != BORDER_CONSTANT &&
+                            border_type != BORDER_TRANSPARENT &&
+                            srccols <= 1 ? BORDER_REPLICATE : border_type;
+        int border_type_y = border_type != BORDER_CONSTANT &&
+                            border_type != BORDER_TRANSPARENT &&
+                            srcrows <= 1 ? BORDER_REPLICATE : border_type;
+
+        for (int y = r.start; y < r.end; y++) {
+            uint8_t* dstptr = dst + y*dststep;
+            int x = 0;
+
+            for (; x < dstcols; x++) {
+                size_t offset = y * dstcols + x;
+                float sx, sy;
+                if (map2_data != nullptr) {
+                    sx = map1_data[offset];
+                    sy = map2_data[offset];
+                } else {
+                    offset *= 2;
+                    sx = map1_data[offset];
+                    sy = map1_data[offset+1];
+                }
+
+                CV_WARP_LINEAR_SCALAR_SHUFFLE(C1, 8U);
+
+                CV_WARP_LINEAR_SCALAR_INTER_CALC_F32(C1);
+
+                CV_WARP_LINEAR_SCALAR_STORE(C1, 8U);
+            }
+        }
+    };
+    parallel_for_(Range(0, dst_rows), worker);
+}
+
+void remapLinearInvoker_8UC3(const uint8_t *src_data, size_t src_step, int src_rows, int src_cols,
+                             uint8_t *dst_data, size_t dst_step, int dst_rows, int dst_cols,
+                             int border_type, const double border_value[4], const float *map1_data, const float *map2_data) {
+    printf("In remapLinearInvoker_8UC3\n");
+    auto worker = [&](const Range &r) {
+        CV_INSTRUMENT_REGION();
+
+        const auto *src = src_data;
+        auto *dst = dst_data;
+        size_t srcstep = src_step, dststep = dst_step;
+        int srccols = src_cols, srcrows = src_rows;
+        int dstcols = dst_cols;
+        uint8_t bval[] = {
+            saturate_cast<uint8_t>(border_value[0]),
+            saturate_cast<uint8_t>(border_value[1]),
+            saturate_cast<uint8_t>(border_value[2]),
+            saturate_cast<uint8_t>(border_value[3]),
+        };
+        int border_type_x = border_type != BORDER_CONSTANT &&
+                            border_type != BORDER_TRANSPARENT &&
+                            srccols <= 1 ? BORDER_REPLICATE : border_type;
+        int border_type_y = border_type != BORDER_CONSTANT &&
+                            border_type != BORDER_TRANSPARENT &&
+                            srcrows <= 1 ? BORDER_REPLICATE : border_type;
+
+        for (int y = r.start; y < r.end; y++) {
+            uint8_t* dstptr = dst + y*dststep;
+            int x = 0;
+
+            for (; x < dstcols; x++) {
+                size_t offset = y * dstcols + x;
+                float sx, sy;
+                if (map2_data != nullptr) {
+                    sx = map1_data[offset];
+                    sy = map2_data[offset];
+                } else {
+                    offset *= 2;
+                    sx = map1_data[offset];
+                    sy = map1_data[offset+1];
+                }
+
+                CV_WARP_LINEAR_SCALAR_SHUFFLE(C3, 8U);
+
+                CV_WARP_LINEAR_SCALAR_INTER_CALC_F32(C3);
+
+                CV_WARP_LINEAR_SCALAR_STORE(C3, 8U);
+            }
+        }
+    };
+    parallel_for_(Range(0, dst_rows), worker);
+}
+
+void remapLinearInvoker_8UC4(const uint8_t *src_data, size_t src_step, int src_rows, int src_cols,
+                             uint8_t *dst_data, size_t dst_step, int dst_rows, int dst_cols,
+                             int border_type, const double border_value[4], const float *map1_data, const float *map2_data) {
+    printf("In remapLinearInvoker_8UC4\n");
+    auto worker = [&](const Range &r) {
+        CV_INSTRUMENT_REGION();
+
+        const auto *src = src_data;
+        auto *dst = dst_data;
+        size_t srcstep = src_step, dststep = dst_step;
+        int srccols = src_cols, srcrows = src_rows;
+        int dstcols = dst_cols;
+
+        uint8_t bval[] = {
+            saturate_cast<uint8_t>(border_value[0]),
+            saturate_cast<uint8_t>(border_value[1]),
+            saturate_cast<uint8_t>(border_value[2]),
+            saturate_cast<uint8_t>(border_value[3]),
+        };
+        int border_type_x = border_type != BORDER_CONSTANT &&
+                            border_type != BORDER_TRANSPARENT &&
+                            srccols <= 1 ? BORDER_REPLICATE : border_type;
+        int border_type_y = border_type != BORDER_CONSTANT &&
+                            border_type != BORDER_TRANSPARENT &&
+                            srcrows <= 1 ? BORDER_REPLICATE : border_type;
+
+        for (int y = r.start; y < r.end; y++) {
+            uint8_t* dstptr = dst + y*dststep;
+            int x = 0;
+
+            for (; x < dstcols; x++) {
+                size_t offset = y * dstcols + x;
+                float sx, sy;
+                if (map2_data != nullptr) {
+                    sx = map1_data[offset];
+                    sy = map2_data[offset];
+                } else {
+                    offset *= 2;
+                    sx = map1_data[offset];
+                    sy = map1_data[offset+1];
+                }
+
+                CV_WARP_LINEAR_SCALAR_SHUFFLE(C4, 8U);
+
+                CV_WARP_LINEAR_SCALAR_INTER_CALC_F32(C4);
+
+                CV_WARP_LINEAR_SCALAR_STORE(C4, 8U);
+            }
+        }
+    };
+    parallel_for_(Range(0, dst_rows), worker);
 }
 
 #endif // CV_CPU_OPTIMIZATION_DECLARATIONS_ONLY

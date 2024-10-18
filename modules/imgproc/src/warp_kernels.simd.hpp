@@ -33,13 +33,7 @@
     vx_store(addr, addr_0); \
     vx_store(addr + vlanes_32, addr_1);
 
-#define CV_WARPAFFINE_LINEAR_VECTOR_COMPUTE_MAPPED_COORD2(CN) \
-    v_float32 src_x0 = v_fma(M0, dst_x0, M_x), \
-              src_y0 = v_fma(M3, dst_x0, M_y), \
-              src_x1 = v_fma(M0, dst_x1, M_x), \
-              src_y1 = v_fma(M3, dst_x1, M_y); \
-    dst_x0 = v_add(dst_x0, delta); \
-    dst_x1 = v_add(dst_x1, delta); \
+#define CV_WARP_LINEAR_VECTOR_COMPUTE_MAPPED_COORD(CN) \
     v_int32 src_ix0 = v_floor(src_x0), \
             src_iy0 = v_floor(src_y0), \
             src_ix1 = v_floor(src_x1), \
@@ -55,6 +49,29 @@
     src_y1 = v_sub(src_y1, v_cvt_f32(src_iy1)); \
     CV_WARP_LINEAR_VECTOR_GET_ADDR(CN);
 
+#define CV_REMAP_LINEAR_VECTOR_COMPUTE_MAPPED_COORD(CN) \
+    v_float32 src_x0, src_y0, \
+              src_x1, src_y1; \
+    if (map2_data == nullptr) { \
+        v_load_deinterleave(sx_data + 2*x, src_x0, src_y0); \
+        v_load_deinterleave(sx_data + 2*(x+vlanes_32), src_x1, src_y1); \
+    } else { \
+        src_x0 = vx_load(sx_data); \
+        src_y0 = vx_load(sy_data); \
+        src_x1 = vx_load(sx_data+vlanes_32); \
+        src_y0 = vx_load(sy_data+vlanes_32); \
+    } \
+    CV_WARP_LINEAR_VECTOR_COMPUTE_MAPPED_COORD(CN)
+
+#define CV_WARPAFFINE_LINEAR_VECTOR_COMPUTE_MAPPED_COORD2(CN) \
+    v_float32 src_x0 = v_fma(M0, dst_x0, M_x), \
+              src_y0 = v_fma(M3, dst_x0, M_y), \
+              src_x1 = v_fma(M0, dst_x1, M_x), \
+              src_y1 = v_fma(M3, dst_x1, M_y); \
+    dst_x0 = v_add(dst_x0, delta); \
+    dst_x1 = v_add(dst_x1, delta); \
+    CV_WARP_LINEAR_VECTOR_COMPUTE_MAPPED_COORD(CN)
+
 #define CV_WARPPERSPECTIVE_LINEAR_VECTOR_COMPUTE_MAPPED_COORD2(CN) \
     v_float32 src_x0 = v_fma(M0, dst_x0, M_x), \
               src_y0 = v_fma(M3, dst_x0, M_y), \
@@ -68,20 +85,7 @@
     src_y1 = v_div(src_y1, src_w1); \
     dst_x0 = v_add(dst_x0, delta); \
     dst_x1 = v_add(dst_x1, delta); \
-    v_int32 src_ix0 = v_floor(src_x0), \
-            src_iy0 = v_floor(src_y0), \
-            src_ix1 = v_floor(src_x1), \
-            src_iy1 = v_floor(src_y1); \
-    v_uint32 mask_0 = v_lt(v_reinterpret_as_u32(src_ix0), inner_scols), \
-                mask_1 = v_lt(v_reinterpret_as_u32(src_ix1), inner_scols); \
-    mask_0 = v_and(mask_0, v_lt(v_reinterpret_as_u32(src_iy0), inner_srows)); \
-    mask_1 = v_and(mask_1, v_lt(v_reinterpret_as_u32(src_iy1), inner_srows)); \
-    v_uint16 inner_mask = v_pack(mask_0, mask_1); \
-    src_x0 = v_sub(src_x0, v_cvt_f32(src_ix0)); \
-    src_y0 = v_sub(src_y0, v_cvt_f32(src_iy0)); \
-    src_x1 = v_sub(src_x1, v_cvt_f32(src_ix1)); \
-    src_y1 = v_sub(src_y1, v_cvt_f32(src_iy1)); \
-    CV_WARP_LINEAR_VECTOR_GET_ADDR(CN);
+    CV_WARP_LINEAR_VECTOR_COMPUTE_MAPPED_COORD(CN)
 
 namespace cv{
 CV_CPU_OPTIMIZATION_NAMESPACE_BEGIN
@@ -2941,16 +2945,34 @@ void remapLinearInvoker_8UC1(const uint8_t *src_data, size_t src_step, int src_r
                             border_type != BORDER_TRANSPARENT &&
                             srcrows <= 1 ? BORDER_REPLICATE : border_type;
 
-        /*
-        map1 & map2: CV_32FC1
-            offset = y*dstcols + x
-            sx = map1_data[offset]
-            sy = map2_data[offset]
-        map1: CV_32FC2
-            offset = 2*(y*dstcols + x)
-            sx = map1_data[offset]
-            sy = map1_data[offset+1]
-        */
+#if (CV_SIMD || CV_SIMD_SCALABLE)
+        constexpr int max_vlanes_32{VTraits<v_float32>::max_nlanes};
+        constexpr int max_uf{max_vlanes_32*2};
+        int vlanes_32 = VTraits<v_float32>::vlanes();
+        // unrolling_factor = lane_size / 16 = vlanes_32 * 32 / 16 = vlanes_32 * 2
+        int uf = vlanes_32 * 2;
+
+        v_uint32 inner_srows = vx_setall_u32((unsigned)srcrows - 2),
+                 inner_scols = vx_setall_u32((unsigned)srccols - 1),
+                 outer_srows = vx_setall_u32((unsigned)srcrows + 1),
+                 outer_scols = vx_setall_u32((unsigned)srccols + 1);
+        v_int32 one = vx_setall_s32(1);
+        v_int32 v_srcstep = vx_setall_s32(int(srcstep));
+        int32_t addr[max_uf],
+                src_ix[max_uf],
+                src_iy[max_uf];
+        uint8_t pixbuf[max_uf*4];
+
+        uint8_t bvalbuf[max_uf];
+        for (int i = 0; i < uf; i++) {
+            bvalbuf[i] = bval[0];
+        }
+        v_uint8 bval_v0 = vx_load_low(&bvalbuf[0]);
+    // #if defined(CV_NEON_AARCH64) && CV_NEON_AARCH64
+    //     uint8x8_t grays = {0, 8, 16, 24, 1, 9, 17, 25};
+    // #endif
+#endif
+
         for (int y = r.start; y < r.end; y++) {
             uint8_t* dstptr = dst + y*dststep;
             const float *sx_data = map1_data + y*dstcols;
@@ -2960,6 +2982,28 @@ void remapLinearInvoker_8UC1(const uint8_t *src_data, size_t src_step, int src_r
                 sy_data = sx_data;
             }
             int x = 0;
+
+#if (CV_SIMD || CV_SIMD_SCALABLE)
+            for (; x <= dstcols - uf; x += uf) {
+                // [TODO] apply halide trick
+
+                CV_REMAP_LINEAR_VECTOR_COMPUTE_MAPPED_COORD(C1);
+
+                if (v_reduce_min(inner_mask) != 0) { // all loaded pixels are completely inside the image
+                    CV_WARP_LINEAR_VECTOR_SHUFFLE_ALLWITHIN(C1, 8U);
+                } else {
+                    CV_WARP_LINEAR_VECTOR_SHUFFLE_NOTALLWITHIN(C1, 8U);
+                }
+
+                CV_WARP_LINEAR_VECTOR_INTER_LOAD_U8S16(C1);
+
+                CV_WARP_LINEAR_VECTOR_INTER_CONVERT_S16F32(C1);
+
+                CV_WARP_LINEAR_VECTOR_INTER_CALC_F32(C1);
+
+                CV_WARP_LINEAR_VECTOR_INTER_STORE_F32U8(C1);
+            }
+#endif // (CV_SIMD || CV_SIMD_SCALABLE)
 
             for (; x < dstcols; x++) {
                 float sx, sy;
@@ -3007,6 +3051,42 @@ void remapLinearInvoker_8UC3(const uint8_t *src_data, size_t src_step, int src_r
                             border_type != BORDER_TRANSPARENT &&
                             srcrows <= 1 ? BORDER_REPLICATE : border_type;
 
+#if (CV_SIMD || CV_SIMD_SCALABLE)
+        constexpr int max_vlanes_16{VTraits<v_uint16>::max_nlanes};
+        constexpr int max_vlanes_32{VTraits<v_float32>::max_nlanes};
+        constexpr int max_uf{max_vlanes_32*2};
+        int vlanes_16 = VTraits<v_uint16>::vlanes();
+        int vlanes_32 = VTraits<v_float32>::vlanes();
+        // unrolling_factor = lane_size / 16 = vlanes_32 * 32 / 16 = vlanes_32 * 2
+        int uf = vlanes_32 * 2;
+
+        v_uint32 inner_srows = vx_setall_u32((unsigned)srcrows - 2),
+                 inner_scols = vx_setall_u32((unsigned)srccols - 1),
+                 outer_srows = vx_setall_u32((unsigned)srcrows + 1),
+                 outer_scols = vx_setall_u32((unsigned)srccols + 1);
+        v_int32 one = vx_setall_s32(1), three = vx_setall_s32(3);
+        v_int32 v_srcstep = vx_setall_s32(int(srcstep));
+        int32_t addr[max_uf],
+                src_ix[max_uf],
+                src_iy[max_uf];
+        uint8_t pixbuf[max_uf*4*3];
+
+        uint8_t bvalbuf[max_uf*3];
+        for (int i = 0; i < uf; i++) {
+            bvalbuf[i*3] = bval[0];
+            bvalbuf[i*3+1] = bval[1];
+            bvalbuf[i*3+2] = bval[2];
+        }
+        v_uint8 bval_v0 = vx_load_low(&bvalbuf[0]);
+        v_uint8 bval_v1 = vx_load_low(&bvalbuf[uf]);
+        v_uint8 bval_v2 = vx_load_low(&bvalbuf[uf*2]);
+    // #if defined(CV_NEON_AARCH64) && CV_NEON_AARCH64
+    //     uint8x8_t reds = {0, 8, 16, 24, 3, 11, 19, 27},
+    //               greens = {1, 9, 17, 25, 4, 12, 20, 28},
+    //               blues = {2, 10, 18, 26, 5, 13, 21, 29};
+    // #endif
+#endif
+
         for (int y = r.start; y < r.end; y++) {
             uint8_t* dstptr = dst + y*dststep;
             const float *sx_data = map1_data + y*dstcols;
@@ -3016,6 +3096,28 @@ void remapLinearInvoker_8UC3(const uint8_t *src_data, size_t src_step, int src_r
                 sy_data = sx_data;
             }
             int x = 0;
+
+#if (CV_SIMD || CV_SIMD_SCALABLE)
+            for (; x <= dstcols - uf; x += uf) {
+                // [TODO] apply halide trick
+
+                CV_REMAP_LINEAR_VECTOR_COMPUTE_MAPPED_COORD(C3);
+
+                if (v_reduce_min(inner_mask) != 0) { // all loaded pixels are completely inside the image
+                    CV_WARP_LINEAR_VECTOR_SHUFFLE_ALLWITHIN(C3, 8U);
+                } else {
+                    CV_WARP_LINEAR_VECTOR_SHUFFLE_NOTALLWITHIN(C3, 8U);
+                }
+
+                CV_WARP_LINEAR_VECTOR_INTER_LOAD_U8S16(C3);
+
+                CV_WARP_LINEAR_VECTOR_INTER_CONVERT_S16F32(C3);
+
+                CV_WARP_LINEAR_VECTOR_INTER_CALC_F32(C3);
+
+                CV_WARP_LINEAR_VECTOR_INTER_STORE_F32U8(C3);
+            }
+#endif // (CV_SIMD || CV_SIMD_SCALABLE)
 
             for (; x < dstcols; x++) {
                 float sx, sy;
@@ -3064,6 +3166,45 @@ void remapLinearInvoker_8UC4(const uint8_t *src_data, size_t src_step, int src_r
                             border_type != BORDER_TRANSPARENT &&
                             srcrows <= 1 ? BORDER_REPLICATE : border_type;
 
+#if (CV_SIMD || CV_SIMD_SCALABLE)
+        constexpr int max_vlanes_16{VTraits<v_uint16>::max_nlanes};
+        constexpr int max_vlanes_32{VTraits<v_float32>::max_nlanes};
+        constexpr int max_uf{max_vlanes_32*2};
+        int vlanes_16 = VTraits<v_uint16>::vlanes();
+        int vlanes_32 = VTraits<v_float32>::vlanes();
+        // unrolling_factor = lane_size / 16 = vlanes_32 * 32 / 16 = vlanes_32 * 2
+        int uf = vlanes_32 * 2;
+
+        v_uint32 inner_srows = vx_setall_u32((unsigned)srcrows - 2),
+                 inner_scols = vx_setall_u32((unsigned)srccols - 1),
+                 outer_srows = vx_setall_u32((unsigned)srcrows + 1),
+                 outer_scols = vx_setall_u32((unsigned)srccols + 1);
+        v_int32 one = vx_setall_s32(1), four = vx_setall_s32(4);
+        v_int32 v_srcstep = vx_setall_s32(int(srcstep));
+        int32_t addr[max_uf],
+                src_ix[max_uf],
+                src_iy[max_uf];
+        uint8_t pixbuf[max_uf*4*4];
+
+        uint8_t bvalbuf[max_uf*4];
+        for (int i = 0; i < uf; i++) {
+            bvalbuf[i*4] = bval[0];
+            bvalbuf[i*4+1] = bval[1];
+            bvalbuf[i*4+2] = bval[2];
+            bvalbuf[i*4+3] = bval[3];
+        }
+        v_uint8 bval_v0 = vx_load_low(&bvalbuf[0]);
+        v_uint8 bval_v1 = vx_load_low(&bvalbuf[uf]);
+        v_uint8 bval_v2 = vx_load_low(&bvalbuf[uf*2]);
+        v_uint8 bval_v3 = vx_load_low(&bvalbuf[uf*3]);
+    // #if defined(CV_NEON_AARCH64) && CV_NEON_AARCH64
+    //     uint8x8_t reds = {0, 8, 16, 24, 4, 12, 20, 28},
+    //               greens = {1, 9, 17, 25, 5, 13, 21, 29},
+    //               blues = {2, 10, 18, 26, 6, 14, 22, 30},
+    //               alphas = {3, 11, 19, 27, 7, 15, 23, 31};
+    // #endif
+#endif
+
         for (int y = r.start; y < r.end; y++) {
             uint8_t* dstptr = dst + y*dststep;
             const float *sx_data = map1_data + y*dstcols;
@@ -3073,6 +3214,28 @@ void remapLinearInvoker_8UC4(const uint8_t *src_data, size_t src_step, int src_r
                 sy_data = sx_data;
             }
             int x = 0;
+
+#if (CV_SIMD || CV_SIMD_SCALABLE)
+            for (; x <= dstcols - uf; x += uf) {
+                // [TODO] apply halide trick
+
+                CV_REMAP_LINEAR_VECTOR_COMPUTE_MAPPED_COORD(C4);
+
+                if (v_reduce_min(inner_mask) != 0) { // all loaded pixels are completely inside the image
+                    CV_WARP_LINEAR_VECTOR_SHUFFLE_ALLWITHIN(C4, 8U);
+                } else {
+                    CV_WARP_LINEAR_VECTOR_SHUFFLE_NOTALLWITHIN(C4, 8U);
+                }
+
+                CV_WARP_LINEAR_VECTOR_INTER_LOAD_U8S16(C4);
+
+                CV_WARP_LINEAR_VECTOR_INTER_CONVERT_S16F32(C4);
+
+                CV_WARP_LINEAR_VECTOR_INTER_CALC_F32(C4);
+
+                CV_WARP_LINEAR_VECTOR_INTER_STORE_F32U8(C4);
+            }
+#endif // (CV_SIMD || CV_SIMD_SCALABLE)
 
             for (; x < dstcols; x++) {
                 float sx, sy;
@@ -3121,6 +3284,31 @@ void remapLinearInvoker_16UC1(const uint16_t *src_data, size_t src_step, int src
                             border_type != BORDER_TRANSPARENT &&
                             srcrows <= 1 ? BORDER_REPLICATE : border_type;
 
+#if (CV_SIMD || CV_SIMD_SCALABLE)
+        constexpr int max_vlanes_32{VTraits<v_float32>::max_nlanes};
+        constexpr int max_uf{max_vlanes_32*2};
+        int vlanes_32 = VTraits<v_float32>::vlanes();
+        // unrolling_factor = lane_size / 16 = vlanes_32 * 32 / 16 = vlanes_32 * 2
+        int uf = vlanes_32 * 2;
+
+        v_uint32 inner_srows = vx_setall_u32((unsigned)srcrows - 2),
+                 inner_scols = vx_setall_u32((unsigned)srccols - 1),
+                 outer_srows = vx_setall_u32((unsigned)srcrows + 1),
+                 outer_scols = vx_setall_u32((unsigned)srccols + 1);
+        v_int32 one = vx_setall_s32(1);
+        v_int32 v_srcstep = vx_setall_s32(int(srcstep));
+        int32_t addr[max_uf],
+                src_ix[max_uf],
+                src_iy[max_uf];
+        uint16_t pixbuf[max_uf*4];
+
+        uint16_t bvalbuf[max_uf];
+        for (int i = 0; i < uf; i++) {
+            bvalbuf[i] = bval[0];
+        }
+        v_uint16 bval_v0 = vx_load(&bvalbuf[0]);
+#endif
+
         for (int y = r.start; y < r.end; y++) {
             uint16_t* dstptr = dst + y*dststep;
             const float *sx_data = map1_data + y*dstcols;
@@ -3130,6 +3318,28 @@ void remapLinearInvoker_16UC1(const uint16_t *src_data, size_t src_step, int src
                 sy_data = sx_data;
             }
             int x = 0;
+
+#if (CV_SIMD || CV_SIMD_SCALABLE)
+            for (; x <= dstcols - uf; x += uf) {
+                // [TODO] apply halide trick
+
+                CV_REMAP_LINEAR_VECTOR_COMPUTE_MAPPED_COORD(C1);
+
+                if (v_reduce_min(inner_mask) != 0) { // all loaded pixels are completely inside the image
+                    CV_WARP_LINEAR_VECTOR_SHUFFLE_ALLWITHIN(C1, 16U);
+                } else {
+                    CV_WARP_LINEAR_VECTOR_SHUFFLE_NOTALLWITHIN(C1, 16U);
+                }
+
+                CV_WARP_LINEAR_VECTOR_INTER_LOAD_U16(C1);
+
+                CV_WARP_LINEAR_VECTOR_INTER_CONVERT_U16F32(C1);
+
+                CV_WARP_LINEAR_VECTOR_INTER_CALC_F32(C1);
+
+                CV_WARP_LINEAR_VECTOR_INTER_STORE_F32U16(C1);
+            }
+#endif // (CV_SIMD || CV_SIMD_SCALABLE)
 
             for (; x < dstcols; x++) {
                 float sx, sy;
@@ -3178,6 +3388,35 @@ void remapLinearInvoker_16UC3(const uint16_t *src_data, size_t src_step, int src
                             border_type != BORDER_TRANSPARENT &&
                             srcrows <= 1 ? BORDER_REPLICATE : border_type;
 
+#if (CV_SIMD || CV_SIMD_SCALABLE)
+        constexpr int max_vlanes_32{VTraits<v_float32>::max_nlanes};
+        constexpr int max_uf{max_vlanes_32*2};
+        int vlanes_32 = VTraits<v_float32>::vlanes();
+        // unrolling_factor = lane_size / 16 = vlanes_32 * 32 / 16 = vlanes_32 * 2
+        int uf = vlanes_32 * 2;
+
+        v_uint32 inner_srows = vx_setall_u32((unsigned)srcrows - 2),
+                 inner_scols = vx_setall_u32((unsigned)srccols - 1),
+                 outer_srows = vx_setall_u32((unsigned)srcrows + 1),
+                 outer_scols = vx_setall_u32((unsigned)srccols + 1);
+        v_int32 one = vx_setall_s32(1), three = vx_setall_s32(3);
+        v_int32 v_srcstep = vx_setall_s32(int(srcstep));
+        int32_t addr[max_uf],
+                src_ix[max_uf],
+                src_iy[max_uf];
+        uint16_t pixbuf[max_uf*4*3];
+
+        uint16_t bvalbuf[max_uf*3];
+        for (int i = 0; i < uf; i++) {
+            bvalbuf[i*3] = bval[0];
+            bvalbuf[i*3+1] = bval[1];
+            bvalbuf[i*3+2] = bval[2];
+        }
+        v_uint16 bval_v0 = vx_load(&bvalbuf[0]);
+        v_uint16 bval_v1 = vx_load(&bvalbuf[uf]);
+        v_uint16 bval_v2 = vx_load(&bvalbuf[uf*2]);
+#endif
+
         for (int y = r.start; y < r.end; y++) {
             uint16_t* dstptr = dst + y*dststep;
             const float *sx_data = map1_data + y*dstcols;
@@ -3187,6 +3426,28 @@ void remapLinearInvoker_16UC3(const uint16_t *src_data, size_t src_step, int src
                 sy_data = sx_data;
             }
             int x = 0;
+
+#if (CV_SIMD || CV_SIMD_SCALABLE)
+            for (; x <= dstcols - uf; x += uf) {
+                // [TODO] apply halide trick
+
+                CV_REMAP_LINEAR_VECTOR_COMPUTE_MAPPED_COORD(C3);
+
+                if (v_reduce_min(inner_mask) != 0) { // all loaded pixels are completely inside the image
+                    CV_WARP_LINEAR_VECTOR_SHUFFLE_ALLWITHIN(C3, 16U);
+                } else {
+                    CV_WARP_LINEAR_VECTOR_SHUFFLE_NOTALLWITHIN(C3, 16U);
+                }
+
+                CV_WARP_LINEAR_VECTOR_INTER_LOAD_U16(C3);
+
+                CV_WARP_LINEAR_VECTOR_INTER_CONVERT_U16F32(C3);
+
+                CV_WARP_LINEAR_VECTOR_INTER_CALC_F32(C3);
+
+                CV_WARP_LINEAR_VECTOR_INTER_STORE_F32U16(C3);
+            }
+#endif // (CV_SIMD || CV_SIMD_SCALABLE)
 
             for (; x < dstcols; x++) {
                 float sx, sy;
@@ -3235,6 +3496,37 @@ void remapLinearInvoker_16UC4(const uint16_t *src_data, size_t src_step, int src
                             border_type != BORDER_TRANSPARENT &&
                             srcrows <= 1 ? BORDER_REPLICATE : border_type;
 
+#if (CV_SIMD || CV_SIMD_SCALABLE)
+        constexpr int max_vlanes_32{VTraits<v_float32>::max_nlanes};
+        constexpr int max_uf{max_vlanes_32*2};
+        int vlanes_32 = VTraits<v_float32>::vlanes();
+        // unrolling_factor = lane_size / 16 = vlanes_32 * 32 / 16 = vlanes_32 * 2
+        int uf = vlanes_32 * 2;
+
+        v_uint32 inner_srows = vx_setall_u32((unsigned)srcrows - 2),
+                 inner_scols = vx_setall_u32((unsigned)srccols - 1),
+                 outer_srows = vx_setall_u32((unsigned)srcrows + 1),
+                 outer_scols = vx_setall_u32((unsigned)srccols + 1);
+        v_int32 one = vx_setall_s32(1), four = vx_setall_s32(4);
+        v_int32 v_srcstep = vx_setall_s32(int(srcstep));
+        int32_t addr[max_uf],
+                src_ix[max_uf],
+                src_iy[max_uf];
+        uint16_t pixbuf[max_uf*4*4];
+
+        uint16_t bvalbuf[max_uf*4];
+        for (int i = 0; i < uf; i++) {
+            bvalbuf[i*4] = bval[0];
+            bvalbuf[i*4+1] = bval[1];
+            bvalbuf[i*4+2] = bval[2];
+            bvalbuf[i*4+3] = bval[3];
+        }
+        v_uint16 bval_v0 = vx_load(&bvalbuf[0]);
+        v_uint16 bval_v1 = vx_load(&bvalbuf[uf]);
+        v_uint16 bval_v2 = vx_load(&bvalbuf[uf*2]);
+        v_uint16 bval_v3 = vx_load(&bvalbuf[uf*3]);
+#endif
+
         for (int y = r.start; y < r.end; y++) {
             uint16_t* dstptr = dst + y*dststep;
             const float *sx_data = map1_data + y*dstcols;
@@ -3244,6 +3536,28 @@ void remapLinearInvoker_16UC4(const uint16_t *src_data, size_t src_step, int src
                 sy_data = sx_data;
             }
             int x = 0;
+
+#if (CV_SIMD || CV_SIMD_SCALABLE)
+            for (; x <= dstcols - uf; x += uf) {
+                // [TODO] apply halide trick
+
+                CV_REMAP_LINEAR_VECTOR_COMPUTE_MAPPED_COORD(C4);
+
+                if (v_reduce_min(inner_mask) != 0) { // all loaded pixels are completely inside the image
+                    CV_WARP_LINEAR_VECTOR_SHUFFLE_ALLWITHIN(C4, 16U);
+                } else {
+                    CV_WARP_LINEAR_VECTOR_SHUFFLE_NOTALLWITHIN(C4, 16U);
+                }
+
+                CV_WARP_LINEAR_VECTOR_INTER_LOAD_U16(C4);
+
+                CV_WARP_LINEAR_VECTOR_INTER_CONVERT_U16F32(C4);
+
+                CV_WARP_LINEAR_VECTOR_INTER_CALC_F32(C4);
+
+                CV_WARP_LINEAR_VECTOR_INTER_STORE_F32U16(C4);
+            }
+#endif // (CV_SIMD || CV_SIMD_SCALABLE)
 
             for (; x < dstcols; x++) {
                 float sx, sy;
@@ -3292,6 +3606,32 @@ void remapLinearInvoker_32FC1(const float *src_data, size_t src_step, int src_ro
                             border_type != BORDER_TRANSPARENT &&
                             srcrows <= 1 ? BORDER_REPLICATE : border_type;
 
+#if (CV_SIMD || CV_SIMD_SCALABLE)
+        constexpr int max_vlanes_32{VTraits<v_float32>::max_nlanes};
+        constexpr int max_uf{max_vlanes_32*2};
+        int vlanes_32 = VTraits<v_float32>::vlanes();
+        // unrolling_factor = lane_size / 16 = vlanes_32 * 32 / 16 = vlanes_32 * 2
+        int uf = vlanes_32 * 2;
+
+        v_uint32 inner_srows = vx_setall_u32((unsigned)srcrows - 2),
+                 inner_scols = vx_setall_u32((unsigned)srccols - 1),
+                 outer_srows = vx_setall_u32((unsigned)srcrows + 1),
+                 outer_scols = vx_setall_u32((unsigned)srccols + 1);
+        v_int32 one = vx_setall_s32(1);
+        v_int32 v_srcstep = vx_setall_s32(int(srcstep));
+        int32_t addr[max_uf],
+                src_ix[max_uf],
+                src_iy[max_uf];
+        float pixbuf[max_uf*4];
+
+        float bvalbuf[max_uf];
+        for (int i = 0; i < uf; i++) {
+            bvalbuf[i] = bval[0];
+        }
+        v_float32 bval_v0_l = vx_load(&bvalbuf[0]);
+        v_float32 bval_v0_h = vx_load(&bvalbuf[vlanes_32]);
+#endif
+
         for (int y = r.start; y < r.end; y++) {
             float* dstptr = dst + y*dststep;
             const float *sx_data = map1_data + y*dstcols;
@@ -3301,6 +3641,26 @@ void remapLinearInvoker_32FC1(const float *src_data, size_t src_step, int src_ro
                 sy_data = sx_data;
             }
             int x = 0;
+
+#if (CV_SIMD || CV_SIMD_SCALABLE)
+            for (; x <= dstcols - uf; x += uf) {
+                // [TODO] apply halide trick
+
+                CV_REMAP_LINEAR_VECTOR_COMPUTE_MAPPED_COORD(C1);
+
+                if (v_reduce_min(inner_mask) != 0) { // all loaded pixels are completely inside the image
+                    CV_WARP_LINEAR_VECTOR_SHUFFLE_ALLWITHIN(C1, 32F);
+                } else {
+                    CV_WARP_LINEAR_VECTOR_SHUFFLE_NOTALLWITHIN(C1, 32F);
+                }
+
+                CV_WARP_LINEAR_VECTOR_INTER_LOAD_F32(C1);
+
+                CV_WARP_LINEAR_VECTOR_INTER_CALC_F32(C1);
+
+                CV_WARP_LINEAR_VECTOR_INTER_STORE_F32F32(C1);
+            }
+#endif // (CV_SIMD || CV_SIMD_SCALABLE)
 
             for (; x < dstcols; x++) {
                 float sx, sy;
@@ -3349,6 +3709,38 @@ void remapLinearInvoker_32FC3(const float *src_data, size_t src_step, int src_ro
                             border_type != BORDER_TRANSPARENT &&
                             srcrows <= 1 ? BORDER_REPLICATE : border_type;
 
+#if (CV_SIMD || CV_SIMD_SCALABLE)
+        constexpr int max_vlanes_32{VTraits<v_float32>::max_nlanes};
+        constexpr int max_uf{max_vlanes_32*2};
+        int vlanes_32 = VTraits<v_float32>::vlanes();
+        // unrolling_factor = lane_size / 16 = vlanes_32 * 32 / 16 = vlanes_32 * 2
+        int uf = vlanes_32 * 2;
+
+        v_uint32 inner_srows = vx_setall_u32((unsigned)srcrows - 2),
+                 inner_scols = vx_setall_u32((unsigned)srccols - 1),
+                 outer_srows = vx_setall_u32((unsigned)srcrows + 1),
+                 outer_scols = vx_setall_u32((unsigned)srccols + 1);
+        v_int32 one = vx_setall_s32(1), three = vx_setall_s32(3);
+        v_int32 v_srcstep = vx_setall_s32(int(srcstep));
+        int32_t addr[max_uf],
+                src_ix[max_uf],
+                src_iy[max_uf];
+        float pixbuf[max_uf*4*3];
+
+        float bvalbuf[max_uf*3];
+        for (int i = 0; i < uf; i++) {
+            bvalbuf[i*3] = bval[0];
+            bvalbuf[i*3+1] = bval[1];
+            bvalbuf[i*3+2] = bval[2];
+        }
+        v_float32 bval_v0_l = vx_load(&bvalbuf[0]);
+        v_float32 bval_v0_h = vx_load(&bvalbuf[vlanes_32]);
+        v_float32 bval_v1_l = vx_load(&bvalbuf[uf]);
+        v_float32 bval_v1_h = vx_load(&bvalbuf[uf+vlanes_32]);
+        v_float32 bval_v2_l = vx_load(&bvalbuf[uf*2]);
+        v_float32 bval_v2_h = vx_load(&bvalbuf[uf*2+vlanes_32]);
+#endif
+
         for (int y = r.start; y < r.end; y++) {
             float* dstptr = dst + y*dststep;
             const float *sx_data = map1_data + y*dstcols;
@@ -3358,6 +3750,26 @@ void remapLinearInvoker_32FC3(const float *src_data, size_t src_step, int src_ro
                 sy_data = sx_data;
             }
             int x = 0;
+
+#if (CV_SIMD || CV_SIMD_SCALABLE)
+            for (; x <= dstcols - uf; x += uf) {
+                // [TODO] apply halide trick
+
+                CV_REMAP_LINEAR_VECTOR_COMPUTE_MAPPED_COORD(C3);
+
+                if (v_reduce_min(inner_mask) != 0) { // all loaded pixels are completely inside the image
+                    CV_WARP_LINEAR_VECTOR_SHUFFLE_ALLWITHIN(C3, 32F);
+                } else {
+                    CV_WARP_LINEAR_VECTOR_SHUFFLE_NOTALLWITHIN(C3, 32F);
+                }
+
+                CV_WARP_LINEAR_VECTOR_INTER_LOAD_F32(C3);
+
+                CV_WARP_LINEAR_VECTOR_INTER_CALC_F32(C3);
+
+                CV_WARP_LINEAR_VECTOR_INTER_STORE_F32F32(C3);
+            }
+#endif // (CV_SIMD || CV_SIMD_SCALABLE)
 
             for (; x < dstcols; x++) {
                 float sx, sy;
@@ -3383,7 +3795,7 @@ void remapLinearInvoker_32FC3(const float *src_data, size_t src_step, int src_ro
 void remapLinearInvoker_32FC4(const float *src_data, size_t src_step, int src_rows, int src_cols,
                               float *dst_data, size_t dst_step, int dst_rows, int dst_cols,
                               int border_type, const double border_value[4], const float *map1_data, const float *map2_data) {
-    printf("In remapLinearInvoker_32FC4\n");
+    printf("In remapLinearInvoker_32FC4, map2_data.empty()=%d\n", map2_data == nullptr);
     auto worker = [&](const Range &r) {
         CV_INSTRUMENT_REGION();
 
@@ -3406,6 +3818,41 @@ void remapLinearInvoker_32FC4(const float *src_data, size_t src_step, int src_ro
                             border_type != BORDER_TRANSPARENT &&
                             srcrows <= 1 ? BORDER_REPLICATE : border_type;
 
+// #if (CV_SIMD || CV_SIMD_SCALABLE)
+//         constexpr int max_vlanes_32{VTraits<v_float32>::max_nlanes};
+//         constexpr int max_uf{max_vlanes_32*2};
+//         int vlanes_32 = VTraits<v_float32>::vlanes();
+//         // unrolling_factor = lane_size / 16 = vlanes_32 * 32 / 16 = vlanes_32 * 2
+//         int uf = vlanes_32 * 2;
+
+//         v_uint32 inner_srows = vx_setall_u32((unsigned)srcrows - 2),
+//                  inner_scols = vx_setall_u32((unsigned)srccols - 1),
+//                  outer_srows = vx_setall_u32((unsigned)srcrows + 1),
+//                  outer_scols = vx_setall_u32((unsigned)srccols + 1);
+//         v_int32 one = vx_setall_s32(1), four = vx_setall_s32(4);
+//         v_int32 v_srcstep = vx_setall_s32(int(srcstep));
+//         int32_t addr[max_uf],
+//                 src_ix[max_uf],
+//                 src_iy[max_uf];
+//         float pixbuf[max_uf*4*4];
+
+//         float bvalbuf[max_uf*4];
+//         for (int i = 0; i < uf; i++) {
+//             bvalbuf[i*4] = bval[0];
+//             bvalbuf[i*4+1] = bval[1];
+//             bvalbuf[i*4+2] = bval[2];
+//             bvalbuf[i*4+3] = bval[3];
+//         }
+//         v_float32 bval_v0_l = vx_load(&bvalbuf[0]);
+//         v_float32 bval_v0_h = vx_load(&bvalbuf[vlanes_32]);
+//         v_float32 bval_v1_l = vx_load(&bvalbuf[uf]);
+//         v_float32 bval_v1_h = vx_load(&bvalbuf[uf+vlanes_32]);
+//         v_float32 bval_v2_l = vx_load(&bvalbuf[uf*2]);
+//         v_float32 bval_v2_h = vx_load(&bvalbuf[uf*2+vlanes_32]);
+//         v_float32 bval_v3_l = vx_load(&bvalbuf[uf*3]);
+//         v_float32 bval_v3_h = vx_load(&bvalbuf[uf*3+vlanes_32]);
+// #endif
+
         for (int y = r.start; y < r.end; y++) {
             float* dstptr = dst + y*dststep;
             const float *sx_data = map1_data + y*dstcols;
@@ -3415,6 +3862,26 @@ void remapLinearInvoker_32FC4(const float *src_data, size_t src_step, int src_ro
                 sy_data = sx_data;
             }
             int x = 0;
+
+// #if (CV_SIMD || CV_SIMD_SCALABLE)
+//             for (; x <= dstcols - uf; x += uf) {
+//                 // [TODO] apply halide trick
+
+//                 CV_REMAP_LINEAR_VECTOR_COMPUTE_MAPPED_COORD(C4);
+
+//                 if (v_reduce_min(inner_mask) != 0) { // all loaded pixels are completely inside the image
+//                     CV_WARP_LINEAR_VECTOR_SHUFFLE_ALLWITHIN(C4, 32F);
+//                 } else {
+//                     CV_WARP_LINEAR_VECTOR_SHUFFLE_NOTALLWITHIN(C4, 32F);
+//                 }
+
+//                 CV_WARP_LINEAR_VECTOR_INTER_LOAD_F32(C4);
+
+//                 CV_WARP_LINEAR_VECTOR_INTER_CALC_F32(C4);
+
+//                 CV_WARP_LINEAR_VECTOR_INTER_STORE_F32F32(C4);
+//             }
+// #endif // (CV_SIMD || CV_SIMD_SCALABLE)
 
             for (; x < dstcols; x++) {
                 float sx, sy;

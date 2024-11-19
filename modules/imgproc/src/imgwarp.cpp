@@ -2657,6 +2657,48 @@ static void warpAffine(int src_type,
     Mat src(Size(src_width, src_height), src_type, const_cast<uchar*>(src_data), src_step);
     Mat dst(Size(dst_width, dst_height), src_type, dst_data, dst_step);
 
+    if (interpolation == INTER_NEAREST) {
+        switch (src_type) {
+            case CV_8UC1: {
+                CV_CPU_DISPATCH(warpAffineNearestInvoker_8UC1, (src_data, src_step, src_height, src_width, dst_data, dst_step, dst_height, dst_width, M, borderType, borderValue), CV_CPU_DISPATCH_MODES_ALL);
+                break;
+            }
+            case CV_8UC3: {
+                CV_CPU_DISPATCH(warpAffineNearestInvoker_8UC3, (src_data, src_step, src_height, src_width, dst_data, dst_step, dst_height, dst_width, M, borderType, borderValue), CV_CPU_DISPATCH_MODES_ALL);
+                break;
+            }
+            case CV_8UC4: {
+                CV_CPU_DISPATCH(warpAffineNearestInvoker_8UC4, (src_data, src_step, src_height, src_width, dst_data, dst_step, dst_height, dst_width, M, borderType, borderValue), CV_CPU_DISPATCH_MODES_ALL);
+                break;
+            }
+            case CV_16UC1: {
+                CV_CPU_DISPATCH(warpAffineNearestInvoker_16UC1, ((const uint16_t*)src_data, src_step, src_height, src_width, (uint16_t*)dst_data, dst_step, dst_height, dst_width, M, borderType, borderValue), CV_CPU_DISPATCH_MODES_ALL);
+                break;
+            }
+            case CV_16UC3: {
+                CV_CPU_DISPATCH(warpAffineNearestInvoker_16UC3, ((const uint16_t*)src_data, src_step, src_height, src_width, (uint16_t*)dst_data, dst_step, dst_height, dst_width, M, borderType, borderValue), CV_CPU_DISPATCH_MODES_ALL);
+                break;
+            }
+            case CV_16UC4: {
+                CV_CPU_DISPATCH(warpAffineNearestInvoker_16UC4, ((const uint16_t*)src_data, src_step, src_height, src_width, (uint16_t*)dst_data, dst_step, dst_height, dst_width, M, borderType, borderValue), CV_CPU_DISPATCH_MODES_ALL);
+                break;
+            }
+            case CV_32FC1: {
+                CV_CPU_DISPATCH(warpAffineNearestInvoker_32FC1, ((const float*)src_data, src_step, src_height, src_width, (float*)dst_data, dst_step, dst_height, dst_width, M, borderType, borderValue), CV_CPU_DISPATCH_MODES_ALL);
+                break;
+            }
+            case CV_32FC3: {
+                CV_CPU_DISPATCH(warpAffineNearestInvoker_32FC3, ((const float*)src_data, src_step, src_height, src_width, (float*)dst_data, dst_step, dst_height, dst_width, M, borderType, borderValue), CV_CPU_DISPATCH_MODES_ALL);
+                break;
+            }
+            case CV_32FC4: {
+                CV_CPU_DISPATCH(warpAffineNearestInvoker_32FC4, ((const float*)src_data, src_step, src_height, src_width, (float*)dst_data, dst_step, dst_height, dst_width, M, borderType, borderValue), CV_CPU_DISPATCH_MODES_ALL);
+                break;
+            }
+            // no default
+        }
+    }
+
     if (interpolation == INTER_LINEAR) {
         switch (src_type) {
             case CV_8UC1: {

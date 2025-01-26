@@ -2101,35 +2101,127 @@ diagtransform_16u(const ushort* src, ushort* dst, const float* m, int len, int s
     if (scn == 3 && dcn == 3) {
         int x = 0;
 
-        v_float32 m0  = vx_setall_f32(m[ 0]);
-        v_float32 m3  = vx_setall_f32(m[ 3]);
-        v_float32 m5  = vx_setall_f32(m[ 5]);
-        v_float32 m7  = vx_setall_f32(m[ 7]);
-        v_float32 m10 = vx_setall_f32(m[10]);
-        v_float32 m11 = vx_setall_f32(m[11]);
-        for (; x <= (len - VTraits<v_uint16>::vlanes()) * 3; x += VTraits<v_uint16>::vlanes() * 3) {
-            v_uint16 b, g, r;
-            v_load_deinterleave(src + x, b, g, r);
-            v_uint32 b_u32_l, g_u32_l, r_u32_l;
-            v_uint32 b_u32_h, g_u32_h, r_u32_h;
-            v_expand(b, b_u32_l, b_u32_h);
-            v_expand(g, g_u32_l, g_u32_h);
-            v_expand(r, r_u32_l, r_u32_h);
+        //
+        // Using LMUL=1 degrades the performance, mean = 2.88 ms
+        //
+        // auto vl_e32m1 = __riscv_vsetvlmax_e32m1();
+        // auto vl_e16m1 = __riscv_vsetvlmax_e16m1();
+        auto vl_e32m1 = 16;
+        auto vl_e16m1 = 32;
+        vfloat32m1_t m0  = __riscv_vfmv_v_f_f32m1(m[ 0], vl_e32m1);
+        vfloat32m1_t m3  = __riscv_vfmv_v_f_f32m1(m[ 3], vl_e32m1);
+        vfloat32m1_t m5  = __riscv_vfmv_v_f_f32m1(m[ 5], vl_e32m1);
+        vfloat32m1_t m7  = __riscv_vfmv_v_f_f32m1(m[ 7], vl_e32m1);
+        vfloat32m1_t m10 = __riscv_vfmv_v_f_f32m1(m[10], vl_e32m1);
+        vfloat32m1_t m11 = __riscv_vfmv_v_f_f32m1(m[11], vl_e32m1);
+        for (; x <= (len - vl_e16m1) * 3; x += vl_e16m1 * 3) {
+            vuint16m1_t b, g, r;
+            b = __riscv_vlse16_v_u16m1((ushort*)(src + x), sizeof(ushort)*3, vl_e16m1);
+            g = __riscv_vlse16_v_u16m1((ushort*)(src + x + 1), sizeof(ushort)*3, vl_e16m1);
+            r = __riscv_vlse16_v_u16m1((ushort*)(src + x + 2), sizeof(ushort)*3, vl_e16m1);
+            vuint32m1_t b_u32_l, g_u32_l, r_u32_l;
+            vuint32m1_t b_u32_h, g_u32_h, r_u32_h;
+            {
+                vuint32m2_t temp = __riscv_vwcvtu_x(b, vl_e16m1);
+                b_u32_l = __riscv_vget_u32m1(temp, 0);
+                b_u32_h = __riscv_vget_u32m1(temp, 1);
+            }
+            {
+                vuint32m2_t temp = __riscv_vwcvtu_x(g, vl_e16m1);
+                g_u32_l = __riscv_vget_u32m1(temp, 0);
+                g_u32_h = __riscv_vget_u32m1(temp, 1);
+            }
+            {
+                vuint32m2_t temp = __riscv_vwcvtu_x(r, vl_e16m1);
+                r_u32_l = __riscv_vget_u32m1(temp, 0);
+                r_u32_h = __riscv_vget_u32m1(temp, 1);
+            }
 
-            v_float32 db_f32_l = v_fma( m0, v_cvt_f32(v_reinterpret_as_s32(b_u32_l)),  m3);
-            v_float32 db_f32_h = v_fma( m0, v_cvt_f32(v_reinterpret_as_s32(b_u32_h)),  m3);
+            vfloat32m1_t db_f32_l = __riscv_vfmacc(m3, m0, __riscv_vfcvt_f_x_v_f32m1(__riscv_vreinterpret_v_u32m1_i32m1(b_u32_l), vl_e32m1), vl_e32m1);
+            vfloat32m1_t db_f32_h = __riscv_vfmacc(m3, m0, __riscv_vfcvt_f_x_v_f32m1(__riscv_vreinterpret_v_u32m1_i32m1(b_u32_h), vl_e32m1), vl_e32m1);
 
-            v_float32 dg_f32_l = v_fma( m5, v_cvt_f32(v_reinterpret_as_s32(g_u32_l)),  m7);
-            v_float32 dg_f32_h = v_fma( m5, v_cvt_f32(v_reinterpret_as_s32(g_u32_h)),  m7);
+            vfloat32m1_t dg_f32_h = __riscv_vfmacc(m7, m5, __riscv_vfcvt_f_x_v_f32m1(__riscv_vreinterpret_v_u32m1_i32m1(g_u32_h), vl_e32m1), vl_e32m1);
+            vfloat32m1_t dg_f32_l = __riscv_vfmacc(m7, m5, __riscv_vfcvt_f_x_v_f32m1(__riscv_vreinterpret_v_u32m1_i32m1(g_u32_l), vl_e32m1), vl_e32m1);
 
-            v_float32 dr_f32_l = v_fma(m10, v_cvt_f32(v_reinterpret_as_s32(r_u32_l)), m11);
-            v_float32 dr_f32_h = v_fma(m10, v_cvt_f32(v_reinterpret_as_s32(r_u32_h)), m11);
+            vfloat32m1_t dr_f32_h = __riscv_vfmacc(m11, m10, __riscv_vfcvt_f_x_v_f32m1(__riscv_vreinterpret_v_u32m1_i32m1(r_u32_h), vl_e32m1), vl_e32m1);
+            vfloat32m1_t dr_f32_l = __riscv_vfmacc(m11, m10, __riscv_vfcvt_f_x_v_f32m1(__riscv_vreinterpret_v_u32m1_i32m1(r_u32_l), vl_e32m1), vl_e32m1);
 
-            v_store_interleave(dst + x,
-                               v_pack_u(v_round(db_f32_l), v_round(db_f32_h)),
-                               v_pack_u(v_round(dg_f32_l), v_round(dg_f32_h)),
-                               v_pack_u(v_round(dr_f32_l), v_round(dr_f32_h)));
+            vint32m1_t db_i32_l = __riscv_vfcvt_x(db_f32_l, vl_e32m1);
+            vint32m1_t db_i32_h = __riscv_vfcvt_x(db_f32_h, vl_e32m1);
+            vint32m1_t dg_i32_l = __riscv_vfcvt_x(dg_f32_l, vl_e32m1);
+            vint32m1_t dg_i32_h = __riscv_vfcvt_x(dg_f32_h, vl_e32m1);
+            vint32m1_t dr_i32_l = __riscv_vfcvt_x(dr_f32_l, vl_e32m1);
+            vint32m1_t dr_i32_h = __riscv_vfcvt_x(dr_f32_h, vl_e32m1);
+
+            vuint16m1_t db_u16 = __riscv_vnclipu(__riscv_vreinterpret_v_i32m2_u32m2(__riscv_vmax(__riscv_vset(__riscv_vlmul_ext_i32m2(db_i32_l), 1, db_i32_h), 0, vl_e16m1)), 0, 0, vl_e16m1);
+            vuint16m1_t dg_u16 = __riscv_vnclipu(__riscv_vreinterpret_v_i32m2_u32m2(__riscv_vmax(__riscv_vset(__riscv_vlmul_ext_i32m2(dg_i32_l), 1, dg_i32_h), 0, vl_e16m1)), 0, 0, vl_e16m1);
+            vuint16m1_t dr_u16 = __riscv_vnclipu(__riscv_vreinterpret_v_i32m2_u32m2(__riscv_vmax(__riscv_vset(__riscv_vlmul_ext_i32m2(dr_i32_l), 1, dr_i32_h), 0, vl_e16m1)), 0, 0, vl_e16m1);
+            __riscv_vsse16((ushort*)(dst + x),     sizeof(ushort)*3, db_u16, vl_e16m1);
+            __riscv_vsse16((ushort*)(dst + x + 1), sizeof(ushort)*3, dg_u16, vl_e16m1);
+            __riscv_vsse16((ushort*)(dst + x + 2), sizeof(ushort)*3, dr_u16, vl_e16m1);
         }
+
+        //
+        // Using LMUL=2 improve the performance, mean = 2.71 ms
+        //
+        // v_float32 m0  = vx_setall_f32(m[ 0]);
+        // v_float32 m3  = vx_setall_f32(m[ 3]);
+        // v_float32 m5  = vx_setall_f32(m[ 5]);
+        // v_float32 m7  = vx_setall_f32(m[ 7]);
+        // v_float32 m10 = vx_setall_f32(m[10]);
+        // v_float32 m11 = vx_setall_f32(m[11]);
+        // for (; x <= (len - VTraits<v_uint16>::vlanes()) * 3; x += VTraits<v_uint16>::vlanes() * 3) {
+        //     v_uint16 b, g, r;
+        //     v_load_deinterleave(src + x, b, g, r);
+        //     v_uint32 b_u32_l, g_u32_l, r_u32_l;
+        //     v_uint32 b_u32_h, g_u32_h, r_u32_h;
+        //     v_expand(b, b_u32_l, b_u32_h);
+        //     v_expand(g, g_u32_l, g_u32_h);
+        //     v_expand(r, r_u32_l, r_u32_h);
+
+        //     v_float32 db_f32_l = v_fma( m0, v_cvt_f32(v_reinterpret_as_s32(b_u32_l)),  m3);
+        //     v_float32 db_f32_h = v_fma( m0, v_cvt_f32(v_reinterpret_as_s32(b_u32_h)),  m3);
+
+        //     v_float32 dg_f32_l = v_fma( m5, v_cvt_f32(v_reinterpret_as_s32(g_u32_l)),  m7);
+        //     v_float32 dg_f32_h = v_fma( m5, v_cvt_f32(v_reinterpret_as_s32(g_u32_h)),  m7);
+
+        //     v_float32 dr_f32_l = v_fma(m10, v_cvt_f32(v_reinterpret_as_s32(r_u32_l)), m11);
+        //     v_float32 dr_f32_h = v_fma(m10, v_cvt_f32(v_reinterpret_as_s32(r_u32_h)), m11);
+
+        //     v_store_interleave(dst + x,
+        //                        v_pack_u(v_round(db_f32_l), v_round(db_f32_h)),
+        //                        v_pack_u(v_round(dg_f32_l), v_round(dg_f32_h)),
+        //                        v_pack_u(v_round(dr_f32_l), v_round(dr_f32_h)));
+        // }
+
+        //
+        // New implementation ties, mean = 2.69 ms
+        //
+        // v_float32 m0  = vx_setall_f32(m[ 0]);
+        // v_float32 m3  = vx_setall_f32(m[ 3] - 32768.f);
+        // v_float32 m5  = vx_setall_f32(m[ 5]);
+        // v_float32 m7  = vx_setall_f32(m[ 7] - 32768.f);
+        // v_float32 m10 = vx_setall_f32(m[10]);
+        // v_float32 m11 = vx_setall_f32(m[11] - 32768.f);
+        // v_int16 delta = vx_setall_s16(-32768);
+        // for (; x <= (len - VTraits<v_uint16>::vlanes())*3; x +=  VTraits<v_uint16>::vlanes()*3)
+        // {
+        //     v_uint16 b, g, r;
+        //     v_load_deinterleave(src + x, b, g, r);
+        //     v_uint32 bl, bh, gl, gh, rl, rh;
+        //     v_expand(b, bl, bh);
+        //     v_expand(g, gl, gh);
+        //     v_expand(r, rl, rh);
+
+        //     v_int16 db, dg, dr;
+        //     db = v_add_wrap(v_pack(v_round(v_muladd(v_cvt_f32(v_reinterpret_as_s32(bl)), m0, m3)),
+        //                            v_round(v_muladd(v_cvt_f32(v_reinterpret_as_s32(bh)), m0, m3))), delta);
+        //     dg = v_add_wrap(v_pack(v_round(v_muladd(v_cvt_f32(v_reinterpret_as_s32(gl)), m5, m7)),
+        //                            v_round(v_muladd(v_cvt_f32(v_reinterpret_as_s32(gh)), m5, m7))), delta);
+        //     dr = v_add_wrap(v_pack(v_round(v_muladd(v_cvt_f32(v_reinterpret_as_s32(rl)), m10, m11)),
+        //                            v_round(v_muladd(v_cvt_f32(v_reinterpret_as_s32(rh)), m10, m11))), delta);
+        //     v_store_interleave(dst + x, v_reinterpret_as_u16(db), v_reinterpret_as_u16(dg), v_reinterpret_as_u16(dr));
+        // }
         for (; x < len * 3; x += 3) {
             int b = src[x], g = src[x + 1], r = src[x + 2];
             ushort db = saturate_cast<ushort>(m[ 0] * b + m[ 3]);

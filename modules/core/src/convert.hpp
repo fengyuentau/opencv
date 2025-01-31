@@ -14,6 +14,33 @@ namespace cv
 
 #if (CV_SIMD || CV_SIMD_SCALABLE)
 
+static inline v_uint16 vx_not_zero(const v_uint16 &a, int shift)
+{
+    CV_UNUSED(shift);
+    v_uint16 zero = vx_setzero_u16(), one = vx_setall_u16(1);
+    return v_and(v_ne(a, zero), one);
+}
+
+static inline v_int16 vx_not_zero(const v_int16 &a, int shift)
+{
+    CV_UNUSED(shift);
+    v_int16 zero = vx_setzero_s16(), one = vx_setall_s16(1);
+    return v_and(v_ne(a, zero), one);
+}
+
+static inline v_uint32 vx_not_zero(const v_uint32 &a, int shift)
+{
+    CV_UNUSED(shift);
+    v_uint32 zero = vx_setzero_u32(), one = vx_setall_u32(1);
+    return v_and(v_ne(a, zero), one);
+}
+
+static inline v_int32 vx_not_zero(const v_int32 &a, int shift)
+{
+    v_int32 zero = vx_setzero_s32(), one = vx_setall_s32(1);
+    return v_and(v_ne(v_shl(a, shift), zero), one);
+}
+
 static inline void vx_load_as(const uchar* ptr, v_float32& a)
 { a = v_cvt_f32(v_reinterpret_as_s32(vx_load_expand_q(ptr))); }
 

@@ -234,6 +234,36 @@ cvt1_( const _Ts* src, size_t sstep, _Td* dst, size_t dstep, Size size )
     }
 }
 
+template<typename _Ts, typename _Twvec, int shift> static inline void
+cvtbool_( const _Ts* src, size_t sstep, uchar* dst, size_t dstep, Size size )
+{
+    sstep /= sizeof(src[0]);
+    dstep /= sizeof(dst[0]);
+
+    for( int i = 0; i < size.height; i++, src += sstep, dst += dstep )
+    {
+        int j = 0;
+#if (CV_SIMD || CV_SIMD_SCALABLE)
+        const int VECSZ = VTraits<_Twvec>::vlanes()*2;
+        for( ; j < size.width; j += VECSZ )
+        {
+            if( j > size.width - VECSZ )
+            {
+                if( j == 0 || src == (_Ts*)dst )
+                    break;
+                j = size.width - VECSZ;
+            }
+            _Twvec v0, v1;
+            vx_load_pair_as(src + j, v0, v1);
+            v_store_pair_as(dst + j, vx_not_zero(v0, shift), vx_not_zero(v1, shift));
+        }
+        vx_cleanup();
+#endif
+        for( ; j < size.width; j++ )
+            dst[j] = (src[j]<<shift != 0);
+    }
+}
+
 static void cvtCopy( const uchar* src, size_t sstep,
                      uchar* dst, size_t dstep, Size size, size_t elemsize)
 {
@@ -266,6 +296,15 @@ static void cvt##suffix(const uchar* src_, size_t sstep, const uchar*, size_t, \
         for ( int j = 0; j < size.width; j++ ) \
             dst[j] = (src[j]<<shift) != 0; \
     } \
+}
+
+#define DEF_CVT2BOOL_SIMD_FUNC(suffix, _Ts, _Twvec, shift) \
+static void cvt##suffix(const uchar* src_, size_t sstep, const uchar*, size_t, \
+                        uchar* dst, size_t dstep, Size size, void*) \
+{ \
+    CV_INSTRUMENT_REGION(); \
+    const _Ts* src = (const _Ts*)src_; \
+    cvtbool_<_Ts, _Twvec, shift>(src, sstep, dst, dstep, size); \
 }
 
 #define DEF_CVTBOOL2_FUNC(suffix, _Td, scale) \
@@ -324,7 +363,7 @@ DEF_CVT_FUNC(8u64f, cvt_,  uchar, double,   v_int32)
 DEF_CVT_SCALAR_FUNC(8u64s, uchar, int64_t)
 DEF_CVT_FUNC(8u16f, cvt1_, uchar, hfloat, v_float32)
 DEF_CVT_FUNC(8u16bf, cvt1_, uchar, bfloat, v_float32)
-DEF_CVT2BOOL_FUNC(8u8b, uchar, 0)
+DEF_CVT2BOOL_SIMD_FUNC(8u8b, uchar, v_uint16, 0)
 
 ////////////////////// 8s -> ... ////////////////////////
 
@@ -376,7 +415,7 @@ DEF_CVT_FUNC(16s64u, cvt_, short, uint64_t, v_uint32)
 DEF_CVT_FUNC(16s64s, cvt_, short, int64_t, v_int32)
 DEF_CVT_FUNC(16s16f, cvt1_,short, hfloat, v_float32)
 DEF_CVT_FUNC(16s16bf, cvt1_, short, bfloat, v_float32)
-DEF_CVT2BOOL_FUNC(16s8b, short, 0)
+DEF_CVT2BOOL_SIMD_FUNC(16s8b, short, v_int16, 0)
 
 ////////////////////// 32u -> ... ////////////////////////
 
@@ -404,7 +443,7 @@ DEF_CVT_FUNC(32s64u, cvt_, int, uint64_t, v_uint32)
 DEF_CVT_FUNC(32s64s, cvt_, int, int64_t, v_int32)
 DEF_CVT_FUNC(32s16f, cvt1_,int, hfloat, v_float32)
 DEF_CVT_FUNC(32s16bf, cvt1_, int, bfloat, v_float32)
-DEF_CVT2BOOL_FUNC(32s8b, int, 0)
+DEF_CVT2BOOL_SIMD_FUNC(32s8b, unsigned, v_uint32, 0)
 
 ////////////////////// 32f -> ... ////////////////////////
 
@@ -419,7 +458,7 @@ DEF_CVT_FUNC(32f64u, cvt_64f, float, uint64_t, v_float64)
 DEF_CVT_FUNC(32f64s, cvt_64f, float, int64_t, v_float64)
 DEF_CVT_FUNC(32f16f, cvt1_,float, hfloat, v_float32)
 DEF_CVT_FUNC(32f16bf, cvt1_,float, bfloat, v_float32)
-DEF_CVT2BOOL_FUNC(32f8b, int, 1)
+DEF_CVT2BOOL_SIMD_FUNC(32f8b, int, v_int32, 1)
 
 ////////////////////// 64f -> ... ////////////////////////
 
@@ -435,6 +474,7 @@ DEF_CVT_FUNC(64f64s, cvt_64f, double, int64_t, v_float32)
 DEF_CVT_FUNC(64f16f, cvt1_,double, hfloat, v_float32)
 DEF_CVT_FUNC(64f16bf, cvt1_,double, bfloat, v_float32)
 DEF_CVT2BOOL_FUNC(64f8b, int64_t, 1)
+// DEF_CVT2BOOL_SIMD_FUNC(64f8b, int64_t, v_int32, 1)
 
 ////////////////////// 16f -> ... ////////////////////////
 
@@ -449,7 +489,7 @@ DEF_CVT_FUNC(16f64f, cvt1_, hfloat, double, v_float32)
 DEF_CVT_FUNC(16f64u, cvt1_, hfloat, uint64_t, v_float32)
 DEF_CVT_FUNC(16f64s, cvt1_, hfloat, int64_t, v_float32)
 DEF_CVT_FUNC(16f16bf, cvt1_, hfloat, bfloat, v_float32)
-DEF_CVT2BOOL_FUNC(16f8b, short, 1)
+DEF_CVT2BOOL_SIMD_FUNC(16f8b, short, v_int16, 1)
 
 ////////////////////// 16bf -> ... ////////////////////////
 
@@ -479,6 +519,7 @@ DEF_CVT_FUNC(64s64u, cvt_, int64_t, uint64_t, v_uint64)
 DEF_CVT_FUNC(64s16f, cvt1_,int64_t, hfloat, v_float32)
 DEF_CVT_FUNC(64s16bf, cvt1_, int64_t, bfloat, v_float32)
 DEF_CVT2BOOL_FUNC(64s8b, int64_t, 0)
+// DEF_CVT2BOOL_SIMD_FUNC(64s8b, int64_t, v_int64, 0)
 
 ////////////////////// 64u -> ... ////////////////////////
 

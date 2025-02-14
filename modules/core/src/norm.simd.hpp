@@ -4,6 +4,10 @@
 
 #include "precomp.hpp"
 
+#if CV_RVV
+#include "norm.rvv1p0.hpp"
+#endif
+
 namespace cv {
 
 using NormFunc = int (*)(const uchar*, const uchar*, uchar*, int, int);
@@ -19,7 +23,7 @@ struct NormInf_SIMD {
     inline ST operator() (const T* src, int n) const {
         ST s = 0;
         for (int i = 0; i < n; i++) {
-            s += std::max(s, (ST)cv_abs(src[i]));
+            s = std::max(s, (ST)cv_abs(src[i]));
         }
         return s;
     }
@@ -459,6 +463,11 @@ struct NormL1_SIMD<float, double> {
 template<>
 struct NormL1_SIMD<double, double> {
     double operator() (const double* src, int n) const {
+#if CV_RVV
+        double res = normL1_rvv(src, n);
+        printf("After normL1_rvv done\n");
+        return res;
+#else
         v_float64 r00 = vx_setzero_f64(), r01 = vx_setzero_f64();
         v_float64 r10 = vx_setzero_f64(), r11 = vx_setzero_f64();
         int j = 0;
@@ -474,6 +483,7 @@ struct NormL1_SIMD<double, double> {
             s += cv_abs(src[j]);
         }
         return s;
+#endif
     }
 };
 
@@ -571,6 +581,9 @@ struct NormL2_SIMD<float, double> {
 template<>
 struct NormL2_SIMD<double, double> {
     double operator() (const double* src, int n) const {
+#if CV_RVV
+        return normL2_rvv(src, n);
+#else
         v_float64 r00 = vx_setzero_f64(), r01 = vx_setzero_f64();
         v_float64 r10 = vx_setzero_f64(), r11 = vx_setzero_f64();
         int j = 0;
@@ -589,6 +602,7 @@ struct NormL2_SIMD<double, double> {
             s += v * v;
         }
         return s;
+#endif
     }
 };
 

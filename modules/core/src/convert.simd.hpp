@@ -234,7 +234,7 @@ cvt1_( const _Ts* src, size_t sstep, _Td* dst, size_t dstep, Size size )
     }
 }
 
-template<typename _Ts, typename _Twvec, int shift> static inline void
+template<typename _Ts, typename _Twvec> static inline void
 cvtbool_( const _Ts* src, size_t sstep, uchar* dst, size_t dstep, Size size )
 {
     sstep /= sizeof(src[0]);
@@ -255,12 +255,56 @@ cvtbool_( const _Ts* src, size_t sstep, uchar* dst, size_t dstep, Size size )
             }
             _Twvec v0, v1;
             vx_load_pair_as(src + j, v0, v1);
-            v_store_pair_as(dst + j, vx_not_zero(v0, shift), vx_not_zero(v1, shift));
+            v_store_pair_as(dst + j, vx_not_zero(v0), vx_not_zero(v1));
         }
         vx_cleanup();
 #endif
         for( ; j < size.width; j++ )
-            dst[j] = (src[j]<<shift != 0);
+            dst[j] = (src[j] != 0);
+    }
+}
+
+template<> inline void
+cvtbool_<uchar, v_uint8>( const uchar* src, size_t sstep, uchar* dst, size_t dstep, Size size ) {
+    sstep /= sizeof(src[0]);
+    dstep /= sizeof(dst[0]);
+
+    // printf("In optimized branch\n");
+    for( int i = 0; i < size.height; i++, src += sstep, dst += dstep )
+    {
+        int j = 0;
+#if (CV_SIMD || CV_SIMD_SCALABLE)
+        const int vle8 = __riscv_vsetvlmax_e8m4();
+        const int VECSZ = vle8*4;
+        vuint8m4_t one = __riscv_vmv_v_x_u8m4(1, vle8), zero = __riscv_vmv_v_x_u8m4(0, vle8);
+        for( ; j < size.width; j += VECSZ )
+        {
+            if( j > size.width - VECSZ )
+            {
+                if( j == 0 || src == (uchar*)dst )
+                    break;
+                j = size.width - VECSZ;
+            }
+            vuint8m4_t v = __riscv_vle8_v_u8m4(src + j, vle8);
+            v = __riscv_vmerge(zero, one, __riscv_vmsne(v, zero, vle8), vle8);
+            __riscv_vse8(dst + j, v, vle8);
+
+            vuint8m4_t v1 = __riscv_vle8_v_u8m4(src + j + vle8, vle8);
+            v1 = __riscv_vmerge(zero, one, __riscv_vmsne(v1, zero, vle8), vle8);
+            __riscv_vse8(dst + j + vle8, v1, vle8);
+
+            vuint8m4_t v2 = __riscv_vle8_v_u8m4(src + j + 2 * vle8, vle8);
+            v2 = __riscv_vmerge(zero, one, __riscv_vmsne(v2, zero, vle8), vle8);
+            __riscv_vse8(dst + j + 2 * vle8, v2, vle8);
+
+            vuint8m4_t v3 = __riscv_vle8_v_u8m4(src + j + 3 * vle8, vle8);
+            v3 = __riscv_vmerge(zero, one, __riscv_vmsne(v3, zero, vle8), vle8);
+            __riscv_vse8(dst + j + 3 * vle8, v3, vle8);
+        }
+        vx_cleanup();
+#endif
+        for( ; j < size.width; j++ )
+            dst[j] = (src[j] != 0);
     }
 }
 
@@ -298,13 +342,13 @@ static void cvt##suffix(const uchar* src_, size_t sstep, const uchar*, size_t, \
     } \
 }
 
-#define DEF_CVT2BOOL_SIMD_FUNC(suffix, _Ts, _Twvec, shift) \
+#define DEF_CVT2BOOL_SIMD_FUNC(suffix, _Ts, _Twvec) \
 static void cvt##suffix(const uchar* src_, size_t sstep, const uchar*, size_t, \
                         uchar* dst, size_t dstep, Size size, void*) \
 { \
     CV_INSTRUMENT_REGION(); \
     const _Ts* src = (const _Ts*)src_; \
-    cvtbool_<_Ts, _Twvec, shift>(src, sstep, dst, dstep, size); \
+    cvtbool_<_Ts, _Twvec>(src, sstep, dst, dstep, size); \
 }
 
 #define DEF_CVTBOOL2_FUNC(suffix, _Td, scale) \
@@ -363,7 +407,7 @@ DEF_CVT_FUNC(8u64f, cvt_,  uchar, double,   v_int32)
 DEF_CVT_SCALAR_FUNC(8u64s, uchar, int64_t)
 DEF_CVT_FUNC(8u16f, cvt1_, uchar, hfloat, v_float32)
 DEF_CVT_FUNC(8u16bf, cvt1_, uchar, bfloat, v_float32)
-DEF_CVT2BOOL_SIMD_FUNC(8u8b, uchar, v_uint16, 0)
+DEF_CVT2BOOL_SIMD_FUNC(8u8b, uchar, v_uint8)
 
 ////////////////////// 8s -> ... ////////////////////////
 
@@ -415,7 +459,7 @@ DEF_CVT_FUNC(16s64u, cvt_, short, uint64_t, v_uint32)
 DEF_CVT_FUNC(16s64s, cvt_, short, int64_t, v_int32)
 DEF_CVT_FUNC(16s16f, cvt1_,short, hfloat, v_float32)
 DEF_CVT_FUNC(16s16bf, cvt1_, short, bfloat, v_float32)
-DEF_CVT2BOOL_SIMD_FUNC(16s8b, short, v_int16, 0)
+DEF_CVT2BOOL_SIMD_FUNC(16s8b, short, v_int16)
 
 ////////////////////// 32u -> ... ////////////////////////
 
@@ -443,7 +487,7 @@ DEF_CVT_FUNC(32s64u, cvt_, int, uint64_t, v_uint32)
 DEF_CVT_FUNC(32s64s, cvt_, int, int64_t, v_int32)
 DEF_CVT_FUNC(32s16f, cvt1_,int, hfloat, v_float32)
 DEF_CVT_FUNC(32s16bf, cvt1_, int, bfloat, v_float32)
-DEF_CVT2BOOL_SIMD_FUNC(32s8b, unsigned, v_uint32, 0)
+DEF_CVT2BOOL_SIMD_FUNC(32s8b, unsigned, v_uint32)
 
 ////////////////////// 32f -> ... ////////////////////////
 
@@ -458,7 +502,8 @@ DEF_CVT_FUNC(32f64u, cvt_64f, float, uint64_t, v_float64)
 DEF_CVT_FUNC(32f64s, cvt_64f, float, int64_t, v_float64)
 DEF_CVT_FUNC(32f16f, cvt1_,float, hfloat, v_float32)
 DEF_CVT_FUNC(32f16bf, cvt1_,float, bfloat, v_float32)
-DEF_CVT2BOOL_SIMD_FUNC(32f8b, int, v_int32, 1)
+DEF_CVT2BOOL_FUNC(32f8b, int, 1)
+// DEF_CVT2BOOL_SIMD_FUNC(32f8b, int, v_int32, 1)
 
 ////////////////////// 64f -> ... ////////////////////////
 
@@ -489,7 +534,8 @@ DEF_CVT_FUNC(16f64f, cvt1_, hfloat, double, v_float32)
 DEF_CVT_FUNC(16f64u, cvt1_, hfloat, uint64_t, v_float32)
 DEF_CVT_FUNC(16f64s, cvt1_, hfloat, int64_t, v_float32)
 DEF_CVT_FUNC(16f16bf, cvt1_, hfloat, bfloat, v_float32)
-DEF_CVT2BOOL_SIMD_FUNC(16f8b, short, v_int16, 1)
+DEF_CVT2BOOL_FUNC(16f8b, short, 1)
+// DEF_CVT2BOOL_SIMD_FUNC(16f8b, short, v_int16, 1)
 
 ////////////////////// 16bf -> ... ////////////////////////
 

@@ -215,6 +215,61 @@ copyMask_<ushort>(const uchar* _src, size_t sstep, const uchar* mask, size_t mst
     }
 }
 
+template<> void
+copyMask_<int>(const uchar* _src, size_t sstep, const uchar* mask, size_t mstep, uchar* _dst, size_t dstep, Size size)
+{
+    CV_IPP_RUN_FAST(CV_INSTRUMENT_FUN_IPP(ippiCopy_32s_C1MR, (const Ipp32s *)_src, (int)sstep, (Ipp32s *)_dst, (int)dstep, ippiSize(size), mask, (int)mstep) >= 0)
+
+    for( ; size.height--; mask += mstep, _src += sstep, _dst += dstep )
+    {
+        const int* src = (const int*)_src;
+        int* dst = (int*)_dst;
+        int x = 0;
+#if (CV_SIMD || CV_SIMD_SCALABLE)
+        for (; x <= size.width - VTraits<v_uint8>::vlanes(); x += VTraits<v_uint8>::vlanes())
+        {
+            v_int32 v_src0 = vx_load(src + x), v_dst0 = vx_load(dst + x);
+            v_int32 v_src1 = vx_load(src + x +     VTraits<v_int32>::vlanes()), v_dst1 = vx_load(dst + x +     VTraits<v_int32>::vlanes());
+            v_int32 v_src2 = vx_load(src + x + 2 * VTraits<v_int32>::vlanes()), v_dst2 = vx_load(dst + x + 2 * VTraits<v_int32>::vlanes());
+            v_int32 v_src3 = vx_load(src + x + 3 * VTraits<v_int32>::vlanes()), v_dst3 = vx_load(dst + x + 3 * VTraits<v_int32>::vlanes());
+
+    #if CV_RVV
+            const int vle8 = __riscv_vsetvlmax_e8mf2();
+            vbool16_t v_nmask0 = __riscv_vmseq(__riscv_vle8_v_u8mf2(mask + x, vle8), 0, vle8);
+            v_dst0 = __riscv_vmerge(v_src0, v_dst0, v_nmask0, __riscv_vsetvlmax_e32m2());
+            vbool16_t v_nmask1 = __riscv_vmseq(__riscv_vle8_v_u8mf2(mask + x + vle8, vle8), 0, vle8);
+            v_dst1 = __riscv_vmerge(v_src1, v_dst1, v_nmask1, __riscv_vsetvlmax_e32m2());
+            vbool16_t v_nmask2 = __riscv_vmseq(__riscv_vle8_v_u8mf2(mask + x + 2 * vle8, vle8), 0, vle8);
+            v_dst2 = __riscv_vmerge(v_src2, v_dst2, v_nmask2, __riscv_vsetvlmax_e32m2());
+            vbool16_t v_nmask3 = __riscv_vmseq(__riscv_vle8_v_u8mf2(mask + x + 3 * vle8, vle8), 0, vle8);
+            v_dst3 = __riscv_vmerge(v_src3, v_dst3, v_nmask3, __riscv_vsetvlmax_e32m2());
+    #else
+            v_uint8 v_nmask = v_eq(vx_load(mask + x), vx_setzero_u8);
+            v_uint16 v_nmask01, v_nmask23;
+            v_expand(v_nmask, v_nmask01, v_nmask23);
+            v_uint32 v_nmask0, v_nmask1, v_nmask2, v_nmask3;
+            v_expand(v_nmask01, v_nmask0, v_nmask1);
+            v_expand(v_nmask23, v_nmask2, v_nmask3);
+
+            v_dst0 = v_select(v_reinterpret_as_s32(v_nmask0), v_dst0, v_src0);
+            v_dst1 = v_select(v_reinterpret_as_s32(v_nmask1), v_dst1, v_src1);
+            v_dst2 = v_select(v_reinterpret_as_s32(v_nmask2), v_dst2, v_src2);
+            v_dst3 = v_select(v_reinterpret_as_s32(v_nmask3), v_dst3, v_src3);
+    #endif
+
+            vx_store(dst + x, v_dst0);
+            vx_store(dst + x +     VTraits<v_int32>::vlanes(), v_dst1);
+            vx_store(dst + x + 2 * VTraits<v_int32>::vlanes(), v_dst2);
+            vx_store(dst + x + 3 * VTraits<v_int32>::vlanes(), v_dst3);
+        }
+        vx_cleanup();
+#endif
+        for (; x < size.width; x++)
+            if ( mask[x] )
+                dst[x] = src[x];
+    }
+}
+
 static void
 copyMaskGeneric(const uchar* _src, size_t sstep, const uchar* mask, size_t mstep, uchar* _dst, size_t dstep, Size size, void* _esz)
 {

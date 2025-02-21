@@ -183,46 +183,41 @@ copyMask_<Vec3b>(const uchar* _src, size_t sstep, const uchar* mask, size_t mste
 {
     CV_IPP_RUN_FAST(CV_INSTRUMENT_FUN_IPP(ippiCopy_8u_C3MR, (const Ipp8u *)_src, (int)sstep, (Ipp8u *)_dst, (int)dstep, ippiSize(size), mask, (int)mstep) >= 0)
 
-    // const int w = size.width * 3;
     for( ; size.height--; mask += mstep, _src += sstep, _dst += dstep )
     {
         const uchar* src = (const uchar*)_src;
         uchar* dst = (uchar*)_dst;
         int x = 0;
 #if (CV_SIMD || CV_SIMD_SCALABLE)
+        for( ; x <= size.width - VTraits<v_uint8>::vlanes(); x += VTraits<v_uint8>::vlanes() )
         {
-            v_uint8 v_zero = vx_setzero_u8();
-
-            for( ; x <= size.width - VTraits<v_uint8>::vlanes(); x += VTraits<v_uint8>::vlanes() )
-            {
-                v_uint8 v_nmask = v_eq(vx_load(mask + x), v_zero);
+            v_uint8 v_nmask = v_eq(vx_load(mask + x), vx_setzero_u8());
     #if CV_RVV
-                vuint8m2x3_t v_src = __riscv_vlseg3e8_v_u8m2x3(src + 3 * x, VTraits<v_uint8>::vlanes());
-                vuint8m2_t v_src0 = __riscv_vget_v_u8m2x3_u8m2(v_src, 0);
-                vuint8m2_t v_src1 = __riscv_vget_v_u8m2x3_u8m2(v_src, 1);
-                vuint8m2_t v_src2 = __riscv_vget_v_u8m2x3_u8m2(v_src, 2);
-                vuint8m2x3_t v_dst = __riscv_vlseg3e8_v_u8m2x3(dst + 3 * x, VTraits<v_uint8>::vlanes());
-                vuint8m2_t v_dst0 = __riscv_vget_v_u8m2x3_u8m2(v_dst, 0);
-                vuint8m2_t v_dst1 = __riscv_vget_v_u8m2x3_u8m2(v_dst, 1);
-                vuint8m2_t v_dst2 = __riscv_vget_v_u8m2x3_u8m2(v_dst, 2);
+            vuint8m2x3_t v_src = __riscv_vlseg3e8_v_u8m2x3(src + 3 * x, VTraits<v_uint8>::vlanes());
+            vuint8m2_t v_src0 = __riscv_vget_v_u8m2x3_u8m2(v_src, 0);
+            vuint8m2_t v_src1 = __riscv_vget_v_u8m2x3_u8m2(v_src, 1);
+            vuint8m2_t v_src2 = __riscv_vget_v_u8m2x3_u8m2(v_src, 2);
+            vuint8m2x3_t v_dst = __riscv_vlseg3e8_v_u8m2x3(dst + 3 * x, VTraits<v_uint8>::vlanes());
+            vuint8m2_t v_dst0 = __riscv_vget_v_u8m2x3_u8m2(v_dst, 0);
+            vuint8m2_t v_dst1 = __riscv_vget_v_u8m2x3_u8m2(v_dst, 1);
+            vuint8m2_t v_dst2 = __riscv_vget_v_u8m2x3_u8m2(v_dst, 2);
     #else
-                v_uint8 v_src0, v_src1, v_src2;
-                v_uint8 v_dst0, v_dst1, v_dst2;
-                v_load_deinterleave(src + 3 * x, v_src0, v_src1, v_src2);
-                v_load_deinterleave(dst + 3 * x, v_dst0, v_dst1, v_dst2);
+            v_uint8 v_src0, v_src1, v_src2;
+            v_uint8 v_dst0, v_dst1, v_dst2;
+            v_load_deinterleave(src + 3 * x, v_src0, v_src1, v_src2);
+            v_load_deinterleave(dst + 3 * x, v_dst0, v_dst1, v_dst2);
     #endif
 
-                v_dst0 = v_select(v_nmask, v_dst0, v_src0);
-                v_dst1 = v_select(v_nmask, v_dst1, v_src1);
-                v_dst2 = v_select(v_nmask, v_dst2, v_src2);
+            v_dst0 = v_select(v_nmask, v_dst0, v_src0);
+            v_dst1 = v_select(v_nmask, v_dst1, v_src1);
+            v_dst2 = v_select(v_nmask, v_dst2, v_src2);
 
     #if CV_RVV
-                v_dst = __riscv_vcreate_v_u8m2x3(v_dst0, v_dst1, v_dst2);
-                __riscv_vsseg3e8_v_u8m2x3(dst + 3 * x, v_dst, VTraits<v_uint8>::vlanes());
+            v_dst = __riscv_vcreate_v_u8m2x3(v_dst0, v_dst1, v_dst2);
+            __riscv_vsseg3e8_v_u8m2x3(dst + 3 * x, v_dst, VTraits<v_uint8>::vlanes());
     #else
-                v_store_interleave(dst + 3 * x, v_dst0, v_dst1, v_dst2);
+            v_store_interleave(dst + 3 * x, v_dst0, v_dst1, v_dst2);
     #endif
-            }
         }
         vx_cleanup();
 #endif
@@ -269,6 +264,79 @@ copyMask_<ushort>(const uchar* _src, size_t sstep, const uchar* mask, size_t mst
         for( ; x < size.width; x++ )
             if( mask[x] )
                 dst[x] = src[x];
+    }
+}
+
+template<> void
+copyMask_<Vec3s>(const uchar* _src, size_t sstep, const uchar* mask, size_t mstep, uchar* _dst, size_t dstep, Size size)
+{
+    CV_IPP_RUN_FAST(CV_INSTRUMENT_FUN_IPP(ippiCopy_16u_C3MR, (const Ipp16u *)_src, (int)sstep, (Ipp16u *)_dst, (int)dstep, ippiSize(size), mask, (int)mstep) >= 0)
+
+    for( ; size.height--; mask += mstep, _src += sstep, _dst += dstep )
+    {
+        const ushort* src = (const ushort*)_src;
+        ushort* dst = (ushort*)_dst;
+        int x = 0;
+#if (CV_SIMD || CV_SIMD_SCALABLE)
+        for( ; x <= size.width - VTraits<v_uint8>::vlanes(); x += VTraits<v_uint8>::vlanes() )
+        {
+            v_uint8 v_nmask = v_eq(vx_load(mask + x), vx_setzero_u8());
+            v_uint16 v_nmask0, v_nmask1;
+            v_expand(v_nmask, v_nmask0, v_nmask1);
+
+    #if CV_RVV
+            vuint16m2x3_t v_src = __riscv_vlseg3e16_v_u16m2x3(src + 3 * x, VTraits<v_uint16>::vlanes());
+            vuint16m2_t v_src0 = __riscv_vget_v_u16m2x3_u16m2(v_src, 0);
+            vuint16m2_t v_src1 = __riscv_vget_v_u16m2x3_u16m2(v_src, 1);
+            vuint16m2_t v_src2 = __riscv_vget_v_u16m2x3_u16m2(v_src, 2);
+            vuint16m2x3_t v_dst = __riscv_vlseg3e16_v_u16m2x3(dst + 3 * x, VTraits<v_uint16>::vlanes());
+            vuint16m2_t v_dst0 = __riscv_vget_v_u16m2x3_u16m2(v_dst, 0);
+            vuint16m2_t v_dst1 = __riscv_vget_v_u16m2x3_u16m2(v_dst, 1);
+            vuint16m2_t v_dst2 = __riscv_vget_v_u16m2x3_u16m2(v_dst, 2);
+            v_src = __riscv_vlseg3e16_v_u16m2x3(src + 3 * (x + VTraits<v_uint16>::vlanes()), VTraits<v_uint16>::vlanes());
+            vuint16m2_t v_src3 = __riscv_vget_v_u16m2x3_u16m2(v_src, 0);
+            vuint16m2_t v_src4 = __riscv_vget_v_u16m2x3_u16m2(v_src, 1);
+            vuint16m2_t v_src5 = __riscv_vget_v_u16m2x3_u16m2(v_src, 2);
+            v_dst = __riscv_vlseg3e16_v_u16m2x3(dst + 3 * (x + VTraits<v_uint16>::vlanes()), VTraits<v_uint16>::vlanes());
+            vuint16m2_t v_dst3 = __riscv_vget_v_u16m2x3_u16m2(v_dst, 0);
+            vuint16m2_t v_dst4 = __riscv_vget_v_u16m2x3_u16m2(v_dst, 1);
+            vuint16m2_t v_dst5 = __riscv_vget_v_u16m2x3_u16m2(v_dst, 2);
+    #else
+            v_uint16 v_src0, v_src1, v_src2;
+            v_uint16 v_dst0, v_dst1, v_dst2;
+            v_load_deinterleave(src + 3 * x, v_src0, v_src1, v_src2);
+            v_load_deinterleave(dst + 3 * x, v_dst0, v_dst1, v_dst2);
+            v_uint16 v_src3, v_src4, v_src5;
+            v_uint16 v_dst3, v_dst4, v_dst5;
+            v_load_deinterleave(src + 3 * (x + VTraits<v_uint16>::vlanes()), v_src3, v_src4, v_src5);
+            v_load_deinterleave(dst + 3 * (x + VTraits<v_uint16>::vlanes()), v_dst3, v_dst4, v_dst5);
+    #endif
+
+            v_dst0 = v_select(v_nmask0, v_dst0, v_src0);
+            v_dst1 = v_select(v_nmask0, v_dst1, v_src1);
+            v_dst2 = v_select(v_nmask0, v_dst2, v_src2);
+            v_dst3 = v_select(v_nmask1, v_dst3, v_src3);
+            v_dst4 = v_select(v_nmask1, v_dst4, v_src4);
+            v_dst5 = v_select(v_nmask1, v_dst5, v_src5);
+
+    #if CV_RVV
+            v_dst = __riscv_vcreate_v_u16m2x3(v_dst0, v_dst1, v_dst2);
+            __riscv_vsseg3e16_v_u16m2x3(dst + 3 * x, v_dst, VTraits<v_uint16>::vlanes());
+            v_dst = __riscv_vcreate_v_u16m2x3(v_dst3, v_dst4, v_dst5);
+            __riscv_vsseg3e16_v_u16m2x3(dst + 3 * (x + VTraits<v_uint16>::vlanes()), v_dst, VTraits<v_uint16>::vlanes());
+    #else
+            v_store_interleave(dst + 3 * x, v_dst0, v_dst1, v_dst2);
+            v_store_interleave(dst + 3 * (x + VTraits<v_uint16>::vlanes()), v_dst3, v_dst4, v_dst5);
+    #endif
+        }
+        vx_cleanup();
+#endif
+        for( ; x < size.width; x++ )
+            if( mask[x] ) {
+                dst[3 * x] = src[3 * x];
+                dst[3 * x + 1] = src[3 * x + 1];
+                dst[3 * x + 2] = src[3 * x + 2];
+            }
     }
 }
 

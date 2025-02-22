@@ -395,6 +395,109 @@ copyMask_<int>(const uchar* _src, size_t sstep, const uchar* mask, size_t mstep,
     }
 }
 
+template<> void
+copyMask_<Vec2i>(const uchar* _src, size_t sstep, const uchar* mask, size_t mstep, uchar* _dst, size_t dstep, Size size)
+{
+    for( ; size.height--; mask += mstep, _src += sstep, _dst += dstep )
+    {
+        const int* src = (const int*)_src;
+        int* dst = (int*)_dst;
+        int x = 0;
+#if (CV_SIMD || CV_SIMD_SCALABLE)
+        for (; x <= size.width - VTraits<v_uint8>::vlanes(); x += VTraits<v_uint8>::vlanes())
+        {
+    #if CV_RVV
+            vint32m1x2_t v_src = __riscv_vlseg2e32_v_i32m1x2(src + 2 * x, VTraits<v_int32>::vlanes());
+            vint32m1_t v_src0 = __riscv_vget_v_i32m1x2_i32m1(v_src, 0);
+            vint32m1_t v_src1 = __riscv_vget_v_i32m1x2_i32m1(v_src, 1);
+            vint32m1x2_t v_dst = __riscv_vlseg2e32_v_i32m1x2(dst + 2 * x, VTraits<v_int32>::vlanes());
+            vint32m1_t v_dst0 = __riscv_vget_v_i32m1x2_i32m1(v_dst, 0);
+            vint32m1_t v_dst1 = __riscv_vget_v_i32m1x2_i32m1(v_dst, 1);
+            v_src = __riscv_vlseg2e32_v_i32m1x2(src + 2 * (x + VTraits<v_int32>::vlanes()), VTraits<v_int32>::vlanes());
+            vint32m1_t v_src2 = __riscv_vget_v_i32m1x2_i32m1(v_src, 0);
+            vint32m1_t v_src3 = __riscv_vget_v_i32m1x2_i32m1(v_src, 1);
+            v_dst = __riscv_vlseg2e32_v_i32m1x2(dst + 2 * (x + VTraits<v_int32>::vlanes()), VTraits<v_int32>::vlanes());
+            vint32m1_t v_dst2 = __riscv_vget_v_i32m1x2_i32m1(v_dst, 0);
+            vint32m1_t v_dst3 = __riscv_vget_v_i32m1x2_i32m1(v_dst, 1);
+            v_src = __riscv_vlseg2e32_v_i32m1x2(src + 2 * (x + 2 * VTraits<v_int32>::vlanes()), VTraits<v_int32>::vlanes());
+            vint32m1_t v_src4 = __riscv_vget_v_i32m1x2_i32m1(v_src, 0);
+            vint32m1_t v_src5 = __riscv_vget_v_i32m1x2_i32m1(v_src, 1);
+            v_dst = __riscv_vlseg2e32_v_i32m1x2(dst + 2 * (x + 2 * VTraits<v_int32>::vlanes()), VTraits<v_int32>::vlanes());
+            vint32m1_t v_dst4 = __riscv_vget_v_i32m1x2_i32m1(v_dst, 0);
+            vint32m1_t v_dst5 = __riscv_vget_v_i32m1x2_i32m1(v_dst, 1);
+            v_src = __riscv_vlseg2e32_v_i32m1x2(src + 2 * (x + 3 * VTraits<v_int32>::vlanes()), VTraits<v_int32>::vlanes());
+            vint32m1_t v_src6 = __riscv_vget_v_i32m1x2_i32m1(v_src, 0);
+            vint32m1_t v_src7 = __riscv_vget_v_i32m1x2_i32m1(v_src, 1);
+            v_dst = __riscv_vlseg2e32_v_i32m1x2(dst + 2 * (x + 3 * VTraits<v_int32>::vlanes()), VTraits<v_int32>::vlanes());
+            vint32m1_t v_dst6 = __riscv_vget_v_i32m1x2_i32m1(v_dst, 0);
+            vint32m1_t v_dst7 = __riscv_vget_v_i32m1x2_i32m1(v_dst, 1);
+
+            const int vle8 = __riscv_vsetvlmax_e8mf4();
+            vbool32_t v_nmask0 = __riscv_vmseq(__riscv_vle8_v_u8mf4(mask + x, vle8), 0, vle8);
+            v_dst0 = __riscv_vmerge(v_src0, v_dst0, v_nmask0, __riscv_vsetvlmax_e32m1());
+            v_dst1 = __riscv_vmerge(v_src1, v_dst1, v_nmask0, __riscv_vsetvlmax_e32m1());
+            vbool32_t v_nmask1 = __riscv_vmseq(__riscv_vle8_v_u8mf4(mask + x + vle8, vle8), 0, vle8);
+            v_dst2 = __riscv_vmerge(v_src2, v_dst2, v_nmask1, __riscv_vsetvlmax_e32m1());
+            v_dst3 = __riscv_vmerge(v_src3, v_dst3, v_nmask1, __riscv_vsetvlmax_e32m1());
+            vbool32_t v_nmask2 = __riscv_vmseq(__riscv_vle8_v_u8mf4(mask + x + 2 * vle8, vle8), 0, vle8);
+            v_dst4 = __riscv_vmerge(v_src4, v_dst4, v_nmask2, __riscv_vsetvlmax_e32m1());
+            v_dst5 = __riscv_vmerge(v_src5, v_dst5, v_nmask2, __riscv_vsetvlmax_e32m1());
+            vbool32_t v_nmask3 = __riscv_vmseq(__riscv_vle8_v_u8mf4(mask + x + 3 * vle8, vle8), 0, vle8);
+            v_dst6 = __riscv_vmerge(v_src6, v_dst6, v_nmask3, __riscv_vsetvlmax_e32m1());
+            v_dst7 = __riscv_vmerge(v_src7, v_dst7, v_nmask3, __riscv_vsetvlmax_e32m1());
+
+            v_dst = __riscv_vcreate_v_i32m1x2(v_dst0, v_dst1);
+            __riscv_vsseg2e32_v_i32m1x2(dst + 2 * x, v_dst, VTraits<v_int32>::vlanes());
+            v_dst = __riscv_vcreate_v_i32m1x2(v_dst2, v_dst3);
+            __riscv_vsseg2e32_v_i32m1x2(dst + 2 * (x + VTraits<v_int32>::vlanes()), v_dst, VTraits<v_int32>::vlanes());
+            v_dst = __riscv_vcreate_v_i32m1x2(v_dst4, v_dst5);
+            __riscv_vsseg2e32_v_i32m1x2(dst + 2 * (x + 2 * VTraits<v_int32>::vlanes()), v_dst, VTraits<v_int32>::vlanes());
+            v_dst = __riscv_vcreate_v_i32m1x2(v_dst6, v_dst7);
+            __riscv_vsseg2e32_v_i32m1x2(dst + 2 * (x + 3 * VTraits<v_int32>::vlanes()), v_dst, VTraits<v_int32>::vlanes());
+    #else
+            v_uint16 v_src0, v_src1, v_src2, v_src3, v_src4, v_src5, v_src6, v_src7;
+            v_uint16 v_dst0, v_dst1, v_dst2, v_dst3, v_dst4, v_dst5, v_dst6, v_dst7;
+            v_load_deinterleave(src + 2 * x, v_src0, v_src1);
+            v_load_deinterleave(dst + 2 * x, v_dst0, v_dst1);
+            v_load_deinterleave(src + 2 * (x + VTraits<v_int32>::vlanes()), v_src2, v_src3);
+            v_load_deinterleave(dst + 2 * (x + VTraits<v_int32>::vlanes()), v_dst2, v_dst3);
+            v_load_deinterleave(src + 2 * (x + 2 * VTraits<v_int32>::vlanes()), v_src4, v_src5);
+            v_load_deinterleave(dst + 2 * (x + 2 * VTraits<v_int32>::vlanes()), v_dst4, v_dst5);
+            v_load_deinterleave(src + 2 * (x + 3 * VTraits<v_int32>::vlanes()), v_src6, v_src7);
+            v_load_deinterleave(dst + 2 * (x + 3 * VTraits<v_int32>::vlanes()), v_dst6, v_dst7);
+
+            v_uint8 v_nmask = v_eq(vx_load(mask + x), vx_setzero_u8());
+            v_uint16 v_nmask01, v_nmask23;
+            v_expand(v_nmask, v_nmask01, v_nmask23);
+            v_uint32 v_nmask0, v_nmask1, v_nmask2, v_nmask3;
+            v_expand(v_nmask01, v_nmask0, v_nmask1);
+            v_expand(v_nmask23, v_nmask2, v_nmask3);
+
+            v_dst0 = v_select(v_reinterpret_as_s32(v_nmask0), v_dst0, v_src0);
+            v_dst1 = v_select(v_reinterpret_as_s32(v_nmask0), v_dst1, v_src1);
+            v_dst2 = v_select(v_reinterpret_as_s32(v_nmask1), v_dst2, v_src2);
+            v_dst3 = v_select(v_reinterpret_as_s32(v_nmask1), v_dst3, v_src3);
+            v_dst4 = v_select(v_reinterpret_as_s32(v_nmask2), v_dst4, v_src4);
+            v_dst5 = v_select(v_reinterpret_as_s32(v_nmask2), v_dst5, v_src5);
+            v_dst6 = v_select(v_reinterpret_as_s32(v_nmask3), v_dst6, v_src6);
+            v_dst7 = v_select(v_reinterpret_as_s32(v_nmask3), v_dst7, v_src7);
+
+            v_store_interleave(dst + 2 * x, v_dst0, v_dst1);
+            v_store_interleave(dst + 2 * (x + VTraits<v_int32>::vlanes()), v_dst2, v_dst3);
+            v_store_interleave(dst + 2 * (x + 2 * VTraits<v_int32>::vlanes()), v_dst4, v_dst5);
+            v_store_interleave(dst + 2 * (x + 3 * VTraits<v_int32>::vlanes()), v_dst6, v_dst7);
+    #endif
+        }
+        vx_cleanup();
+#endif
+        for (; x < size.width; x++)
+            if ( mask[x] ) {
+                dst[2 * x] = src[2 * x];
+                dst[2 * x + 1] = src[2 * x + 1];
+            }
+    }
+}
+
 static void
 copyMaskGeneric(const uchar* _src, size_t sstep, const uchar* mask, size_t mstep, uchar* _dst, size_t dstep, Size size, void* _esz)
 {

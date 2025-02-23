@@ -718,6 +718,124 @@ copyMask_<Vec4i>(const uchar* _src, size_t sstep, const uchar* mask, size_t mste
     }
 }
 
+template<> void
+copyMask_<Vec6i>(const uchar* _src, size_t sstep, const uchar* mask, size_t mstep, uchar* _dst, size_t dstep, Size size)
+{
+    for( ; size.height--; mask += mstep, _src += sstep, _dst += dstep )
+    {
+        const int* src = (const int*)_src;
+        int* dst = (int*)_dst;
+        int x = 0;
+#if (CV_SIMD || CV_SIMD_SCALABLE)
+    #if CV_RVV
+        for (; x <= size.width - (int)__riscv_vsetvlmax_e8mf4(); x += (int)__riscv_vsetvlmax_e8mf4())
+        {
+            const int vle32 = __riscv_vsetvlmax_e32m1();
+            vint32m1x6_t v_src = __riscv_vlseg6e32_v_i32m1x6(src + 6 * x, vle32);
+            vint32m1_t v_src0 = __riscv_vget_v_i32m1x6_i32m1(v_src, 0);
+            vint32m1_t v_src1 = __riscv_vget_v_i32m1x6_i32m1(v_src, 1);
+            vint32m1_t v_src2 = __riscv_vget_v_i32m1x6_i32m1(v_src, 2);
+            vint32m1_t v_src3 = __riscv_vget_v_i32m1x6_i32m1(v_src, 3);
+            vint32m1_t v_src4 = __riscv_vget_v_i32m1x6_i32m1(v_src, 4);
+            vint32m1_t v_src5 = __riscv_vget_v_i32m1x6_i32m1(v_src, 5);
+            vint32m1x6_t v_dst = __riscv_vlseg6e32_v_i32m1x6(dst + 6 * x, vle32);
+            vint32m1_t v_dst0 = __riscv_vget_v_i32m1x6_i32m1(v_dst, 0);
+            vint32m1_t v_dst1 = __riscv_vget_v_i32m1x6_i32m1(v_dst, 1);
+            vint32m1_t v_dst2 = __riscv_vget_v_i32m1x6_i32m1(v_dst, 2);
+            vint32m1_t v_dst3 = __riscv_vget_v_i32m1x6_i32m1(v_dst, 3);
+            vint32m1_t v_dst4 = __riscv_vget_v_i32m1x6_i32m1(v_dst, 4);
+            vint32m1_t v_dst5 = __riscv_vget_v_i32m1x6_i32m1(v_dst, 5);
+
+            const int vle8 = __riscv_vsetvlmax_e8mf4();
+            vbool32_t v_nmask0 = __riscv_vmseq(__riscv_vle8_v_u8mf4(mask + x, vle8), 0, vle8);
+            v_dst0 = __riscv_vmerge(v_src0, v_dst0, v_nmask0, vle32);
+            v_dst1 = __riscv_vmerge(v_src1, v_dst1, v_nmask0, vle32);
+            v_dst2 = __riscv_vmerge(v_src2, v_dst2, v_nmask0, vle32);
+            v_dst3 = __riscv_vmerge(v_src3, v_dst3, v_nmask0, vle32);
+            v_dst4 = __riscv_vmerge(v_src4, v_dst4, v_nmask0, vle32);
+            v_dst5 = __riscv_vmerge(v_src5, v_dst5, v_nmask0, vle32);
+
+
+            v_dst = __riscv_vcreate_v_i32m1x6(v_dst0, v_dst1, v_dst2, v_dst3, v_dst4, v_dst5);
+            __riscv_vsseg6e32_v_i32m1x6(dst + 6 * x, v_dst, vle32);
+        }
+    #endif
+#endif
+        for (; x < size.width; x++)
+            if ( mask[x] ) {
+                dst[6 * x] = src[6 * x];
+                dst[6 * x + 1] = src[6 * x + 1];
+                dst[6 * x + 2] = src[6 * x + 2];
+                dst[6 * x + 3] = src[6 * x + 3];
+                dst[6 * x + 4] = src[6 * x + 4];
+                dst[6 * x + 5] = src[6 * x + 5];
+            }
+    }
+}
+
+template<> void
+copyMask_<Vec8i>(const uchar* _src, size_t sstep, const uchar* mask, size_t mstep, uchar* _dst, size_t dstep, Size size)
+{
+    for( ; size.height--; mask += mstep, _src += sstep, _dst += dstep )
+    {
+        const int* src = (const int*)_src;
+        int* dst = (int*)_dst;
+        int x = 0;
+#if (CV_SIMD || CV_SIMD_SCALABLE)
+    #if CV_RVV
+        for (; x <= size.width - (int)__riscv_vsetvlmax_e8mf4(); x += (int)__riscv_vsetvlmax_e8mf4())
+        {
+            const int vle32 = __riscv_vsetvlmax_e32m1();
+            vint32m1x8_t v_src = __riscv_vlseg8e32_v_i32m1x8(src + 8 * x, vle32);
+            vint32m1_t v_src0 = __riscv_vget_v_i32m1x8_i32m1(v_src, 0);
+            vint32m1_t v_src1 = __riscv_vget_v_i32m1x8_i32m1(v_src, 1);
+            vint32m1_t v_src2 = __riscv_vget_v_i32m1x8_i32m1(v_src, 2);
+            vint32m1_t v_src3 = __riscv_vget_v_i32m1x8_i32m1(v_src, 3);
+            vint32m1_t v_src4 = __riscv_vget_v_i32m1x8_i32m1(v_src, 4);
+            vint32m1_t v_src5 = __riscv_vget_v_i32m1x8_i32m1(v_src, 5);
+            vint32m1_t v_src6 = __riscv_vget_v_i32m1x8_i32m1(v_src, 6);
+            vint32m1_t v_src7 = __riscv_vget_v_i32m1x8_i32m1(v_src, 7);
+            vint32m1x8_t v_dst = __riscv_vlseg8e32_v_i32m1x8(dst + 8 * x, vle32);
+            vint32m1_t v_dst0 = __riscv_vget_v_i32m1x8_i32m1(v_dst, 0);
+            vint32m1_t v_dst1 = __riscv_vget_v_i32m1x8_i32m1(v_dst, 1);
+            vint32m1_t v_dst2 = __riscv_vget_v_i32m1x8_i32m1(v_dst, 2);
+            vint32m1_t v_dst3 = __riscv_vget_v_i32m1x8_i32m1(v_dst, 3);
+            vint32m1_t v_dst4 = __riscv_vget_v_i32m1x8_i32m1(v_dst, 4);
+            vint32m1_t v_dst5 = __riscv_vget_v_i32m1x8_i32m1(v_dst, 5);
+            vint32m1_t v_dst6 = __riscv_vget_v_i32m1x8_i32m1(v_dst, 6);
+            vint32m1_t v_dst7 = __riscv_vget_v_i32m1x8_i32m1(v_dst, 7);
+
+            const int vle8 = __riscv_vsetvlmax_e8mf4();
+            vbool32_t v_nmask0 = __riscv_vmseq(__riscv_vle8_v_u8mf4(mask + x, vle8), 0, vle8);
+            v_dst0 = __riscv_vmerge(v_src0, v_dst0, v_nmask0, vle32);
+            v_dst1 = __riscv_vmerge(v_src1, v_dst1, v_nmask0, vle32);
+            v_dst2 = __riscv_vmerge(v_src2, v_dst2, v_nmask0, vle32);
+            v_dst3 = __riscv_vmerge(v_src3, v_dst3, v_nmask0, vle32);
+            v_dst4 = __riscv_vmerge(v_src4, v_dst4, v_nmask0, vle32);
+            v_dst5 = __riscv_vmerge(v_src5, v_dst5, v_nmask0, vle32);
+            v_dst6 = __riscv_vmerge(v_src6, v_dst6, v_nmask0, vle32);
+            v_dst7 = __riscv_vmerge(v_src7, v_dst7, v_nmask0, vle32);
+
+
+            v_dst = __riscv_vcreate_v_i32m1x8(v_dst0, v_dst1, v_dst2, v_dst3, v_dst4, v_dst5, v_dst6, v_dst7);
+            __riscv_vsseg8e32_v_i32m1x8(dst + 8 * x, v_dst, vle32);
+        }
+    #endif
+#endif
+        for (; x < size.width; x++)
+            if ( mask[x] ) {
+                dst[8 * x]     = src[8 * x];
+                dst[8 * x + 1] = src[8 * x + 1];
+                dst[8 * x + 2] = src[8 * x + 2];
+                dst[8 * x + 3] = src[8 * x + 3];
+                dst[8 * x + 4] = src[8 * x + 4];
+                dst[8 * x + 5] = src[8 * x + 5];
+                dst[8 * x + 6] = src[8 * x + 6];
+                dst[8 * x + 7] = src[8 * x + 7];
+            }
+    }
+}
+
 static void
 copyMaskGeneric(const uchar* _src, size_t sstep, const uchar* mask, size_t mstep, uchar* _dst, size_t dstep, Size size, void* _esz)
 {

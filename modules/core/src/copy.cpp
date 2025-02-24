@@ -351,6 +351,20 @@ copyMask_<int>(const uchar* _src, size_t sstep, const uchar* mask, size_t mstep,
         int* dst = (int*)_dst;
         int x = 0;
 #if (CV_SIMD || CV_SIMD_SCALABLE)
+    #if CV_RVV
+        for (; x <= size.width - (int)__riscv_vsetvlmax_e8m1(); x += (int)__riscv_vsetvlmax_e8m1())
+        {
+            const int vle32m4 = __riscv_vsetvlmax_e32m4();
+            vint32m4_t v_src = __riscv_vle32_v_i32m4(src + x, vle32m4);
+            vint32m4_t v_dst = __riscv_vle32_v_i32m4(dst + x, vle32m4);
+
+            const int vle8m1 = __riscv_vsetvlmax_e8m1();
+            vbool8_t v_nmask = __riscv_vmseq(__riscv_vle8_v_u8m1(mask + x, vle8m1), 0, vle8m1);
+            v_dst = __riscv_vmerge(v_src, v_dst, v_nmask, vle32m4);
+
+            __riscv_vse32_v_i32m4(dst + x, v_dst, vle32m4);
+        }
+    #else
         for (; x <= size.width - VTraits<v_uint8>::vlanes(); x += VTraits<v_uint8>::vlanes())
         {
             v_int32 v_src0 = vx_load(src + x), v_dst0 = vx_load(dst + x);
@@ -358,23 +372,7 @@ copyMask_<int>(const uchar* _src, size_t sstep, const uchar* mask, size_t mstep,
             v_int32 v_src2 = vx_load(src + x + 2 * VTraits<v_int32>::vlanes()), v_dst2 = vx_load(dst + x + 2 * VTraits<v_int32>::vlanes());
             v_int32 v_src3 = vx_load(src + x + 3 * VTraits<v_int32>::vlanes()), v_dst3 = vx_load(dst + x + 3 * VTraits<v_int32>::vlanes());
 
-    #if CV_RVV
-            const int vle8 = __riscv_vsetvlmax_e8mf2();
-            vbool16_t v_nmask0 = __riscv_vmseq(__riscv_vle8_v_u8mf2(mask + x, vle8), 0, vle8);
-            v_dst0 = __riscv_vmerge(v_src0, v_dst0, v_nmask0, __riscv_vsetvlmax_e32m2());
-            vbool16_t v_nmask1 = __riscv_vmseq(__riscv_vle8_v_u8mf2(mask + x + vle8, vle8), 0, vle8);
-            v_dst1 = __riscv_vmerge(v_src1, v_dst1, v_nmask1, __riscv_vsetvlmax_e32m2());
-            vbool16_t v_nmask2 = __riscv_vmseq(__riscv_vle8_v_u8mf2(mask + x + 2 * vle8, vle8), 0, vle8);
-            v_dst2 = __riscv_vmerge(v_src2, v_dst2, v_nmask2, __riscv_vsetvlmax_e32m2());
-            vbool16_t v_nmask3 = __riscv_vmseq(__riscv_vle8_v_u8mf2(mask + x + 3 * vle8, vle8), 0, vle8);
-            v_dst3 = __riscv_vmerge(v_src3, v_dst3, v_nmask3, __riscv_vsetvlmax_e32m2());
-    #else
             v_uint8 v_nmask = v_eq(vx_load(mask + x), vx_setzero_u8());
-            // v_uint16 v_nmask01, v_nmask23;
-            // v_expand(v_nmask, v_nmask01, v_nmask23);
-            // v_uint32 v_nmask0, v_nmask1, v_nmask2, v_nmask3;
-            // v_expand(v_nmask01, v_nmask0, v_nmask1);
-            // v_expand(v_nmask23, v_nmask2, v_nmask3);
             v_uint8 v_nmask0, v_nmask1;
             v_zip(v_nmask, v_nmask, v_nmask0, v_nmask1);
             v_uint8 v_nmask00, v_nmask01, v_nmask10, v_nmask11;
@@ -385,7 +383,6 @@ copyMask_<int>(const uchar* _src, size_t sstep, const uchar* mask, size_t mstep,
             v_dst1 = v_select(v_reinterpret_as_s32(v_nmask01), v_dst1, v_src1);
             v_dst2 = v_select(v_reinterpret_as_s32(v_nmask10), v_dst2, v_src2);
             v_dst3 = v_select(v_reinterpret_as_s32(v_nmask11), v_dst3, v_src3);
-    #endif
 
             vx_store(dst + x, v_dst0);
             vx_store(dst + x +     VTraits<v_int32>::vlanes(), v_dst1);
@@ -393,6 +390,7 @@ copyMask_<int>(const uchar* _src, size_t sstep, const uchar* mask, size_t mstep,
             vx_store(dst + x + 3 * VTraits<v_int32>::vlanes(), v_dst3);
         }
         vx_cleanup();
+    #endif
 #endif
         for (; x < size.width; x++)
             if ( mask[x] )
@@ -412,123 +410,19 @@ copyMask_<Vec2i>(const uchar* _src, size_t sstep, const uchar* mask, size_t mste
     #if CV_RVV
         for (; x <= size.width - (int)__riscv_vsetvlmax_e8m1(); x += (int)__riscv_vsetvlmax_e8m1())
         {
-            const int vle32 = __riscv_vsetvlmax_e32m1();
-            vint32m1x2_t v_src = __riscv_vlseg2e32_v_i32m1x2(src + 2 * x, vle32);
-            vint32m1_t v_src0 = __riscv_vget_v_i32m1x2_i32m1(v_src, 0);
-            vint32m1_t v_src1 = __riscv_vget_v_i32m1x2_i32m1(v_src, 1);
-            vint32m1x2_t v_dst = __riscv_vlseg2e32_v_i32m1x2(dst + 2 * x, vle32);
-            vint32m1_t v_dst0 = __riscv_vget_v_i32m1x2_i32m1(v_dst, 0);
-            vint32m1_t v_dst1 = __riscv_vget_v_i32m1x2_i32m1(v_dst, 1);
-            v_src = __riscv_vlseg2e32_v_i32m1x2(src + 2 * (x + vle32), vle32);
-            vint32m1_t v_src2 = __riscv_vget_v_i32m1x2_i32m1(v_src, 0);
-            vint32m1_t v_src3 = __riscv_vget_v_i32m1x2_i32m1(v_src, 1);
-            v_dst = __riscv_vlseg2e32_v_i32m1x2(dst + 2 * (x + vle32), vle32);
-            vint32m1_t v_dst2 = __riscv_vget_v_i32m1x2_i32m1(v_dst, 0);
-            vint32m1_t v_dst3 = __riscv_vget_v_i32m1x2_i32m1(v_dst, 1);
-            v_src = __riscv_vlseg2e32_v_i32m1x2(src + 2 * (x + 2 * vle32), vle32);
-            vint32m1_t v_src4 = __riscv_vget_v_i32m1x2_i32m1(v_src, 0);
-            vint32m1_t v_src5 = __riscv_vget_v_i32m1x2_i32m1(v_src, 1);
-            v_dst = __riscv_vlseg2e32_v_i32m1x2(dst + 2 * (x + 2 * vle32), vle32);
-            vint32m1_t v_dst4 = __riscv_vget_v_i32m1x2_i32m1(v_dst, 0);
-            vint32m1_t v_dst5 = __riscv_vget_v_i32m1x2_i32m1(v_dst, 1);
-            v_src = __riscv_vlseg2e32_v_i32m1x2(src + 2 * (x + 3 * vle32), vle32);
-            vint32m1_t v_src6 = __riscv_vget_v_i32m1x2_i32m1(v_src, 0);
-            vint32m1_t v_src7 = __riscv_vget_v_i32m1x2_i32m1(v_src, 1);
-            v_dst = __riscv_vlseg2e32_v_i32m1x2(dst + 2 * (x + 3 * vle32), vle32);
-            vint32m1_t v_dst6 = __riscv_vget_v_i32m1x2_i32m1(v_dst, 0);
-            vint32m1_t v_dst7 = __riscv_vget_v_i32m1x2_i32m1(v_dst, 1);
+            const int vle32m8 = __riscv_vsetvlmax_e32m8();
+            vint32m8_t v_src = __riscv_vle32_v_i32m8(src + 2 * x, vle32m8);
+            vint32m8_t v_dst = __riscv_vle32_v_i32m8(dst + 2 * x, vle32m8);
 
-            const int vle8 = __riscv_vsetvlmax_e8mf4();
-            vbool32_t v_nmask0 = __riscv_vmseq(__riscv_vle8_v_u8mf4(mask + x, vle8), 0, vle8);
-            v_dst0 = __riscv_vmerge(v_src0, v_dst0, v_nmask0, __riscv_vsetvlmax_e32m1());
-            v_dst1 = __riscv_vmerge(v_src1, v_dst1, v_nmask0, __riscv_vsetvlmax_e32m1());
-            vbool32_t v_nmask1 = __riscv_vmseq(__riscv_vle8_v_u8mf4(mask + x + vle8, vle8), 0, vle8);
-            v_dst2 = __riscv_vmerge(v_src2, v_dst2, v_nmask1, __riscv_vsetvlmax_e32m1());
-            v_dst3 = __riscv_vmerge(v_src3, v_dst3, v_nmask1, __riscv_vsetvlmax_e32m1());
-            vbool32_t v_nmask2 = __riscv_vmseq(__riscv_vle8_v_u8mf4(mask + x + 2 * vle8, vle8), 0, vle8);
-            v_dst4 = __riscv_vmerge(v_src4, v_dst4, v_nmask2, __riscv_vsetvlmax_e32m1());
-            v_dst5 = __riscv_vmerge(v_src5, v_dst5, v_nmask2, __riscv_vsetvlmax_e32m1());
-            vbool32_t v_nmask3 = __riscv_vmseq(__riscv_vle8_v_u8mf4(mask + x + 3 * vle8, vle8), 0, vle8);
-            v_dst6 = __riscv_vmerge(v_src6, v_dst6, v_nmask3, __riscv_vsetvlmax_e32m1());
-            v_dst7 = __riscv_vmerge(v_src7, v_dst7, v_nmask3, __riscv_vsetvlmax_e32m1());
+            const int vle8m1 = __riscv_vsetvlmax_e8m1();
+            vuint8m1_t v_mask = __riscv_vle8_v_u8m1(mask + x, vle8m1);
+            vuint16m2_t ab_waddu = __riscv_vwaddu_vv(v_mask, v_mask, vle8m1);
+            vuint16m2_t zipped_u16 = __riscv_vwmaccu(ab_waddu, UINT8_MAX, v_mask, vle8m1);
+            vuint8m2_t zipped = __riscv_vreinterpret_v_u16m2_u8m2(zipped_u16);
+            vbool4_t v_nmask = __riscv_vmseq(zipped, 0, __riscv_vsetvlmax_e8m2());
+            v_dst = __riscv_vmerge(v_src, v_dst, v_nmask, vle32m8);
 
-            // const int vle8m1 = __riscv_vsetvlmax_e8m1();
-            // vuint8m1_t v_nmask = __riscv_vle8_v_u8m1(mask + x, vle8m1);
-            // v_nmask = __riscv_vmerge(__riscv_vmv_v_x_u8m1(0, vle8m1), -1, __riscv_vmseq(v_nmask, 0, vle8m1), vle8m1);
-            // vint32m4_t v_nmask_i32 = __riscv_vwcvt_x(__riscv_vwcvt_x(__riscv_vreinterpret_i8m1(v_nmask), vle8m1), vle8m1);
-            // vint32m1_t v_nmask0 = __riscv_vget_i32m1(v_nmask_i32, 0);
-            // v_dst0 = __riscv_vxor_vv_i32m1(__riscv_vand_vv_i32m1(__riscv_vxor_vv_i32m1(v_src0, v_dst0, vle32), v_nmask0, vle32), v_src0, vle32);
-            // v_dst1 = __riscv_vxor_vv_i32m1(__riscv_vand_vv_i32m1(__riscv_vxor_vv_i32m1(v_src1, v_dst1, vle32), v_nmask0, vle32), v_src1, vle32);
-            // vint32m1_t v_nmask1 = __riscv_vget_i32m1(v_nmask_i32, 1);
-            // v_dst2 = __riscv_vxor_vv_i32m1(__riscv_vand_vv_i32m1(__riscv_vxor_vv_i32m1(v_src2, v_dst2, vle32), v_nmask1, vle32), v_src2, vle32);
-            // v_dst3 = __riscv_vxor_vv_i32m1(__riscv_vand_vv_i32m1(__riscv_vxor_vv_i32m1(v_src3, v_dst3, vle32), v_nmask1, vle32), v_src3, vle32);
-            // vint32m1_t v_nmask2 = __riscv_vget_i32m1(v_nmask_i32, 2);
-            // v_dst4 = __riscv_vxor_vv_i32m1(__riscv_vand_vv_i32m1(__riscv_vxor_vv_i32m1(v_src4, v_dst4, vle32), v_nmask2, vle32), v_src4, vle32);
-            // v_dst5 = __riscv_vxor_vv_i32m1(__riscv_vand_vv_i32m1(__riscv_vxor_vv_i32m1(v_src5, v_dst5, vle32), v_nmask2, vle32), v_src5, vle32);
-            // vint32m1_t v_nmask3 = __riscv_vget_i32m1(v_nmask_i32, 3);
-            // v_dst6 = __riscv_vxor_vv_i32m1(__riscv_vand_vv_i32m1(__riscv_vxor_vv_i32m1(v_src6, v_dst6, vle32), v_nmask3, vle32), v_src6, vle32);
-            // v_dst7 = __riscv_vxor_vv_i32m1(__riscv_vand_vv_i32m1(__riscv_vxor_vv_i32m1(v_src7, v_dst7, vle32), v_nmask3, vle32), v_src7, vle32);
-
-            vint32m1x2_t v_dst01 = __riscv_vcreate_v_i32m1x2(v_dst0, v_dst1);
-            __riscv_vsseg2e32_v_i32m1x2(dst + 2 * x, v_dst01, vle32);
-            vint32m1x2_t v_dst23 = __riscv_vcreate_v_i32m1x2(v_dst2, v_dst3);
-            __riscv_vsseg2e32_v_i32m1x2(dst + 2 * (x + vle32), v_dst23, vle32);
-            vint32m1x2_t v_dst45 = __riscv_vcreate_v_i32m1x2(v_dst4, v_dst5);
-            __riscv_vsseg2e32_v_i32m1x2(dst + 2 * (x + 2 * vle32), v_dst45, vle32);
-            vint32m1x2_t v_dst67 = __riscv_vcreate_v_i32m1x2(v_dst6, v_dst7);
-            __riscv_vsseg2e32_v_i32m1x2(dst + 2 * (x + 3 * vle32), v_dst67, vle32);
-
-            // const int vle32 = __riscv_vsetvlmax_e32m1();
-            // vint32m1_t v_src0 = __riscv_vle32_v_i32m1(src + 2 * x, vle32);
-            // vint32m1_t v_src1 = __riscv_vle32_v_i32m1(src + 2 * x + vle32, vle32);
-            // vint32m1_t v_src2 = __riscv_vle32_v_i32m1(src + 2 * x + 2 * vle32, vle32);
-            // vint32m1_t v_src3 = __riscv_vle32_v_i32m1(src + 2 * x + 3 * vle32, vle32);
-            // vint32m1_t v_src4 = __riscv_vle32_v_i32m1(src + 2 * x + 4 * vle32, vle32);
-            // vint32m1_t v_src5 = __riscv_vle32_v_i32m1(src + 2 * x + 5 * vle32, vle32);
-            // vint32m1_t v_src6 = __riscv_vle32_v_i32m1(src + 2 * x + 6 * vle32, vle32);
-            // vint32m1_t v_src7 = __riscv_vle32_v_i32m1(src + 2 * x + 7 * vle32, vle32);
-            // vint32m1_t v_dst0 = __riscv_vle32_v_i32m1(dst + 2 * x, vle32);
-            // vint32m1_t v_dst1 = __riscv_vle32_v_i32m1(dst + 2 * x + vle32, vle32);
-            // vint32m1_t v_dst2 = __riscv_vle32_v_i32m1(dst + 2 * x + 2 * vle32, vle32);
-            // vint32m1_t v_dst3 = __riscv_vle32_v_i32m1(dst + 2 * x + 3 * vle32, vle32);
-            // vint32m1_t v_dst4 = __riscv_vle32_v_i32m1(dst + 2 * x + 4 * vle32, vle32);
-            // vint32m1_t v_dst5 = __riscv_vle32_v_i32m1(dst + 2 * x + 5 * vle32, vle32);
-            // vint32m1_t v_dst6 = __riscv_vle32_v_i32m1(dst + 2 * x + 6 * vle32, vle32);
-            // vint32m1_t v_dst7 = __riscv_vle32_v_i32m1(dst + 2 * x + 7 * vle32, vle32);
-
-            // const int vle8 = __riscv_vsetvlmax_e8m1(), vle8mf4 = __riscv_vsetvlmax_e8mf4();
-            // vuint8m1_t v_nmask = __riscv_vle8_v_u8m1(mask + x, vle8);
-            // vuint16m2_t ab_waddu = __riscv_vwaddu_vv_u16m2(v_nmask, v_nmask, vle8);
-            // vuint16m2_t zipped_u16 = __riscv_vwmaccu_vx_u16m2(ab_waddu, UINT8_MAX, v_nmask, vle8);
-            // vuint8m2_t zipped = __riscv_vreinterpret_v_u16m2_u8m2(zipped_u16);
-            // vuint8m1_t v_nmask_a, v_nmask_b;
-            // v_nmask_a = __riscv_vget_v_u8m2_u8m1(zipped, 0);
-            // v_nmask_b = __riscv_vget_v_u8m2_u8m1(zipped, 1);
-            // vbool32_t v_nmask0 = __riscv_vmseq(__riscv_vlmul_trunc_v_u8m1_u8mf4(v_nmask_a), 0, vle8mf4);
-            // v_dst0 = __riscv_vmerge(v_src0, v_dst0, v_nmask0, __riscv_vsetvlmax_e32m1());
-            // vbool32_t v_nmask1 = __riscv_vmseq(__riscv_vlmul_trunc_v_u8m1_u8mf4(__riscv_vslidedown_vx_u8m1(v_nmask_a, vle8mf4, vle8mf4)), 0, vle8mf4);
-            // v_dst1 = __riscv_vmerge(v_src1, v_dst1, v_nmask1, __riscv_vsetvlmax_e32m1());
-            // vbool32_t v_nmask2 = __riscv_vmseq(__riscv_vlmul_trunc_v_u8m1_u8mf4(__riscv_vslidedown_vx_u8m1(v_nmask_a, 2*vle8mf4, vle8mf4)), 0, vle8mf4);
-            // v_dst2 = __riscv_vmerge(v_src2, v_dst2, v_nmask2, __riscv_vsetvlmax_e32m1());
-            // vbool32_t v_nmask3 = __riscv_vmseq(__riscv_vlmul_trunc_v_u8m1_u8mf4(__riscv_vslidedown_vx_u8m1(v_nmask_a, 3*vle8mf4, vle8mf4)), 0, vle8mf4);
-            // v_dst3 = __riscv_vmerge(v_src3, v_dst3, v_nmask3, __riscv_vsetvlmax_e32m1());
-            // vbool32_t v_nmask4 = __riscv_vmseq(__riscv_vlmul_trunc_v_u8m1_u8mf4(v_nmask_b), 0, vle8mf4);
-            // v_dst4 = __riscv_vmerge(v_src4, v_dst4, v_nmask4, __riscv_vsetvlmax_e32m1());
-            // vbool32_t v_nmask5 = __riscv_vmseq(__riscv_vlmul_trunc_v_u8m1_u8mf4(__riscv_vslidedown_vx_u8m1(v_nmask_b, vle8mf4, vle8mf4)), 0, vle8mf4);
-            // v_dst5 = __riscv_vmerge(v_src5, v_dst5, v_nmask5, __riscv_vsetvlmax_e32m1());
-            // vbool32_t v_nmask6 = __riscv_vmseq(__riscv_vlmul_trunc_v_u8m1_u8mf4(__riscv_vslidedown_vx_u8m1(v_nmask_b, 2*vle8mf4, vle8mf4)), 0, vle8mf4);
-            // v_dst6 = __riscv_vmerge(v_src6, v_dst6, v_nmask6, __riscv_vsetvlmax_e32m1());
-            // vbool32_t v_nmask7 = __riscv_vmseq(__riscv_vlmul_trunc_v_u8m1_u8mf4(__riscv_vslidedown_vx_u8m1(v_nmask_b, 3*vle8mf4, vle8mf4)), 0, vle8mf4);
-            // v_dst7 = __riscv_vmerge(v_src7, v_dst7, v_nmask7, __riscv_vsetvlmax_e32m1());
-
-            // __riscv_vse32_v_i32m1(dst + 2 * x, v_dst0, vle32);
-            // __riscv_vse32_v_i32m1(dst + 2 * x + vle32, v_dst1, vle32);
-            // __riscv_vse32_v_i32m1(dst + 2 * x + 2 * vle32, v_dst2, vle32);
-            // __riscv_vse32_v_i32m1(dst + 2 * x + 3 * vle32, v_dst3, vle32);
-            // __riscv_vse32_v_i32m1(dst + 2 * x + 4 * vle32, v_dst4, vle32);
-            // __riscv_vse32_v_i32m1(dst + 2 * x + 5 * vle32, v_dst5, vle32);
-            // __riscv_vse32_v_i32m1(dst + 2 * x + 6 * vle32, v_dst6, vle32);
-            // __riscv_vse32_v_i32m1(dst + 2 * x + 7 * vle32, v_dst7, vle32);
+            __riscv_vse32_v_i32m8(dst + 2 * x, v_dst, vle32m8);
         }
     #else
         for (; x <= size.width - VTraits<v_uint8>::vlanes(); x += VTraits<v_uint8>::vlanes())

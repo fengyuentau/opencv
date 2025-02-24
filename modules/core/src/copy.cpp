@@ -398,6 +398,23 @@ copyMask_<int>(const uchar* _src, size_t sstep, const uchar* mask, size_t mstep,
     }
 }
 
+#if CV_RVV
+static inline vuint8m1_t __riscv_zip(const vuint8mf2_t &a, const vuint8mf2_t &b)
+{
+    const int vle8mf2 = __riscv_vsetvlmax_e8mf2();
+    vuint16m1_t t = __riscv_vwaddu_vv(a, b, vle8mf2);
+    vuint16m1_t zipped = __riscv_vwmaccu(t, UINT8_MAX, b, vle8mf2);
+    return __riscv_vreinterpret_v_u16m1_u8m1(zipped);
+}
+static inline vuint8m2_t __riscv_zip(const vuint8m1_t &a, const vuint8m1_t &b)
+{
+    const int vle8m1 = __riscv_vsetvlmax_e8m1();
+    vuint16m2_t t = __riscv_vwaddu_vv(a, b, vle8m1);
+    vuint16m2_t zipped = __riscv_vwmaccu(t, UINT8_MAX, b, vle8m1);
+    return __riscv_vreinterpret_v_u16m2_u8m2(zipped);
+}
+#endif
+
 template<> void
 copyMask_<Vec2i>(const uchar* _src, size_t sstep, const uchar* mask, size_t mstep, uchar* _dst, size_t dstep, Size size)
 {
@@ -416,10 +433,8 @@ copyMask_<Vec2i>(const uchar* _src, size_t sstep, const uchar* mask, size_t mste
 
             const int vle8m1 = __riscv_vsetvlmax_e8m1();
             vuint8m1_t v_mask = __riscv_vle8_v_u8m1(mask + x, vle8m1);
-            vuint16m2_t ab_waddu = __riscv_vwaddu_vv(v_mask, v_mask, vle8m1);
-            vuint16m2_t zipped_u16 = __riscv_vwmaccu(ab_waddu, UINT8_MAX, v_mask, vle8m1);
-            vuint8m2_t zipped = __riscv_vreinterpret_v_u16m2_u8m2(zipped_u16);
-            vbool4_t v_nmask = __riscv_vmseq(zipped, 0, __riscv_vsetvlmax_e8m2());
+            vuint8m2_t v_mask_zipped = __riscv_zip(v_mask, v_mask);
+            vbool4_t v_nmask = __riscv_vmseq(v_mask_zipped, 0, __riscv_vsetvlmax_e8m2());
             v_dst = __riscv_vmerge(v_src, v_dst, v_nmask, vle32m8);
 
             __riscv_vse32_v_i32m8(dst + 2 * x, v_dst, vle32m8);
@@ -478,6 +493,88 @@ copyMask_<Vec2i>(const uchar* _src, size_t sstep, const uchar* mask, size_t mste
             if ( mask[x] ) {
                 dst[2 * x] = src[2 * x];
                 dst[2 * x + 1] = src[2 * x + 1];
+            }
+    }
+}
+
+template<> void
+copyMask_<Vec4i>(const uchar* _src, size_t sstep, const uchar* mask, size_t mstep, uchar* _dst, size_t dstep, Size size)
+{
+    for( ; size.height--; mask += mstep, _src += sstep, _dst += dstep )
+    {
+        const int* src = (const int*)_src;
+        int* dst = (int*)_dst;
+        int x = 0;
+#if (CV_SIMD || CV_SIMD_SCALABLE)
+    #if CV_RVV
+        for (; x <= size.width - (int)__riscv_vsetvlmax_e8mf2(); x += (int)__riscv_vsetvlmax_e8mf2())
+        {
+            const int vle32m8 = __riscv_vsetvlmax_e32m8();
+            vint32m8_t v_src = __riscv_vle32_v_i32m8(src + 4 * x, vle32m8);
+            vint32m8_t v_dst = __riscv_vle32_v_i32m8(dst + 4 * x, vle32m8);
+
+            const int vle8mf2 = __riscv_vsetvlmax_e8mf2();
+            vuint8mf2_t v_mask = __riscv_vle8_v_u8mf2(mask + x, vle8mf2);
+            vuint8m1_t v_mask_zip1 = __riscv_zip(v_mask, v_mask);
+            vuint8m2_t v_mask_zip2 = __riscv_zip(v_mask_zip1, v_mask_zip1);
+            vbool4_t v_nmask = __riscv_vmseq(v_mask_zip2, 0, __riscv_vsetvlmax_e8m2());
+            v_dst = __riscv_vmerge(v_src, v_dst, v_nmask, vle32m8);
+
+            __riscv_vse32_v_i32m8(dst + 4 * x, v_dst, vle32m8);
+        }
+    #else
+        for (; x <= size.width - (VTraits<v_uint8>::vlanes() / 2); x += (VTraits<v_uint8>::vlanes() / 2))
+        {
+            v_int32 v_src0, v_src1, v_src2, v_src3, v_src4, v_src5, v_src6, v_src7;
+            v_int32 v_dst0, v_dst1, v_dst2, v_dst3, v_dst4, v_dst5, v_dst6, v_dst7;
+            v_src0 = vx_load(src + 4 * x);
+            v_src1 = vx_load(src + 4 * x + VTraits<v_int32>::vlanes());
+            v_src2 = vx_load(src + 4 * x + 2 * VTraits<v_int32>::vlanes());
+            v_src3 = vx_load(src + 4 * x + 3 * VTraits<v_int32>::vlanes());
+            v_src4 = vx_load(src + 4 * x + 4 * VTraits<v_int32>::vlanes());
+            v_src5 = vx_load(src + 4 * x + 5 * VTraits<v_int32>::vlanes());
+            v_src6 = vx_load(src + 4 * x + 6 * VTraits<v_int32>::vlanes());
+            v_src7 = vx_load(src + 4 * x + 7 * VTraits<v_int32>::vlanes());
+            v_dst0 = vx_load(dst + 4 * x);
+            v_dst1 = vx_load(dst + 4 * x + VTraits<v_int32>::vlanes());
+            v_dst2 = vx_load(dst + 4 * x + 2 * VTraits<v_int32>::vlanes());
+            v_dst3 = vx_load(dst + 4 * x + 3 * VTraits<v_int32>::vlanes());
+            v_dst4 = vx_load(dst + 4 * x + 4 * VTraits<v_int32>::vlanes());
+            v_dst5 = vx_load(dst + 4 * x + 5 * VTraits<v_int32>::vlanes());
+            v_dst6 = vx_load(dst + 4 * x + 6 * VTraits<v_int32>::vlanes());
+            v_dst7 = vx_load(dst + 4 * x + 7 * VTraits<v_int32>::vlanes());
+
+            v_uint16 v_nmask = v_eq(vx_load_expand(mask + x), vx_setzero_u16());
+            v_uint16 v_nmask0, v_nmask1;
+            v_zip(v_nmask, v_nmask, v_nmask0, v_nmask1);
+
+            v_dst0 = v_select(v_reinterpret_as_s32(v_nmask0), v_dst0, v_src0);
+            v_dst1 = v_select(v_reinterpret_as_s32(v_nmask0), v_dst1, v_src1);
+            v_dst2 = v_select(v_reinterpret_as_s32(v_nmask0), v_dst2, v_src2);
+            v_dst3 = v_select(v_reinterpret_as_s32(v_nmask0), v_dst3, v_src3);
+            v_dst4 = v_select(v_reinterpret_as_s32(v_nmask1), v_dst4, v_src4);
+            v_dst5 = v_select(v_reinterpret_as_s32(v_nmask1), v_dst5, v_src5);
+            v_dst6 = v_select(v_reinterpret_as_s32(v_nmask1), v_dst6, v_src6);
+            v_dst7 = v_select(v_reinterpret_as_s32(v_nmask1), v_dst7, v_src7);
+
+            vx_store(dst + 4 * x, v_dst0);
+            vx_store(dst + 4 * x + VTraits<v_int32>::vlanes(), v_dst1);
+            vx_store(dst + 4 * x + 2 * VTraits<v_int32>::vlanes(), v_dst2);
+            vx_store(dst + 4 * x + 3 * VTraits<v_int32>::vlanes(), v_dst3);
+            vx_store(dst + 4 * x + 4 * VTraits<v_int32>::vlanes(), v_dst4);
+            vx_store(dst + 4 * x + 5 * VTraits<v_int32>::vlanes(), v_dst5);
+            vx_store(dst + 4 * x + 6 * VTraits<v_int32>::vlanes(), v_dst6);
+            vx_store(dst + 4 * x + 7 * VTraits<v_int32>::vlanes(), v_dst7);
+        }
+        vx_cleanup();
+    #endif
+#endif
+        for (; x < size.width; x++)
+            if ( mask[x] ) {
+                dst[4 * x]     = src[4 * x];
+                dst[4 * x + 1] = src[4 * x + 1];
+                dst[4 * x + 2] = src[4 * x + 2];
+                dst[4 * x + 3] = src[4 * x + 3];
             }
     }
 }

@@ -31,6 +31,7 @@
 #include "hal_rvv_1p0/atan.hpp" // core
 #include "hal_rvv_1p0/split.hpp" // core
 #include "hal_rvv_1p0/flip.hpp" // core
+#include "hal_rvv_1p0/polar_to_cart.hpp" // core
 #include "hal_rvv_1p0/lut.hpp" // core
 #include "hal_rvv_1p0/lu.hpp" // core
 #include "hal_rvv_1p0/cholesky.hpp" // core

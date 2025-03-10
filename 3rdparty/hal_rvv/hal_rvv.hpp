@@ -41,6 +41,7 @@
 #include "hal_rvv_1p0/magnitude.hpp" // core
 #include "hal_rvv_1p0/exp.hpp" // core
 #include "hal_rvv_1p0/log.hpp" // core
+#include "hal_rvv_1p0/sqrt.hpp" // core
 
 
 #include "hal_rvv_1p0/pyramids.hpp" // imgproc

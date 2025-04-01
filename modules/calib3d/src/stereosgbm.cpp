@@ -150,11 +150,23 @@ static inline v_int16 vx_setseq_s16()
 }
 #endif
 // define some additional reduce operations:
+/*
+if( Sval < minS )
+{
+    minS = Sval;
+    bestDisp = (short)d;
+}
+min_pos(_minS, _bestDisp, minS, bestDisp);
+*/
 static inline void min_pos(const v_int16& val, const v_int16& pos, short &min_val, short &min_pos)
 {
     min_val = v_reduce_min(val);
     v_int16 v_mask = (v_eq(vx_setall_s16(min_val), val));
-    min_pos = v_reduce_min(v_or(v_and(v_add(pos, vx_setseq_s16()), v_mask), v_and(vx_setall_s16(SHRT_MAX), v_not(v_mask))));
+    min_pos = v_reduce_min(v_or(
+                                v_and(v_add(pos, vx_setseq_s16()), v_mask),
+                                v_and(vx_setall_s16(SHRT_MAX), v_not(v_mask))
+                               )
+                          );
 }
 #endif
 
@@ -270,6 +282,29 @@ static void calcPixelCostBT( const Mat& img1, const Mat& img2, int y,
             int u1 = std::max(ul, ur); u1 = std::max(u1, u);
 
             int d = minD;
+        // #if CV_RVV
+        //     {
+        //         vuint8mf2_t _u  = __riscv_vmv_v_x_u8mf2((uchar)u,  __riscv_vsetvlmax_e8mf2());
+        //         vuint8mf2_t _u0 = __riscv_vmv_v_x_u8mf2((uchar)u0, __riscv_vsetvlmax_e8mf2());
+        //         vuint8mf2_t _u1 = __riscv_vmv_v_x_u8mf2((uchar)u1, __riscv_vsetvlmax_e8mf2());
+
+        //         int vl;
+        //         for (; d < maxD; d += vl) {
+        //             vl = __riscv_vsetvl_e16m1(maxD - d);
+
+        //             vuint8mf2_t _v  = __riscv_vle8_v_u8mf2(prow2  + width-x-1 + d, vl);
+        //             vuint8mf2_t _v0 = __riscv_vle8_v_u8mf2(buffer + width-x-1 + d, vl);
+        //             vuint8mf2_t _v1 = __riscv_vle8_v_u8mf2(buffer + width-x-1 + d + width2, vl);
+        //             vuint8mf2_t c0 = __riscv_vmaxu(__riscv_vsub(_u, _v1, vl), __riscv_vsub(_v0, _u, vl), vl);
+        //             vuint8mf2_t c1 = __riscv_vmaxu(__riscv_vsub(_v, _u1, vl), __riscv_vsub(_u0, _v, vl), vl);
+        //             vuint8mf2_t diff = __riscv_vminu(c0, c1, vl);
+        //             vuint16m1_t diff_u16m1 = __riscv_vzext_vf2(diff, vl);
+
+        //             vint16m1_t _c0 = __riscv_vle16_v_i16m1(cost + x*D + d, vl);
+        //             _c0 = __riscv_vadd(_c0, __riscv_vreinterpret_i16m1(__riscv_vsrl(diff_u16m1, diff_scale, vl)), vl);
+        //             __riscv_vse16(cost + x*D + d, _c0, vl);
+        //         }
+        //     }
         #if (CV_SIMD || CV_SIMD_SCALABLE)
             v_uint8 _u  = vx_setall_u8((uchar)u), _u0 = vx_setall_u8((uchar)u0);
             v_uint8 _u1 = vx_setall_u8((uchar)u1);
@@ -500,7 +535,8 @@ static void computeDisparitySGBM( const Mat& img1, const Mat& img2,
     int P1 = params.P1 > 0 ? params.P1 : 2, P2 = std::max(params.P2 > 0 ? params.P2 : 5, P1+1);
     int k, width = disp1.cols, height = disp1.rows;
     int minX1 = std::max(maxD, 0), maxX1 = width + std::min(minD, 0);
-    const int D = params.numDisparities;
+    // const int D = params.numDisparities; // 7235ms
+    constexpr int D = 256; // 7273 ms
     int width1 = maxX1 - minX1;
     int Da = (int)alignSize(D,VTraits<v_int16>::vlanes());
     int Dlra = Da + VTraits<v_int16>::vlanes();//Additional memory is necessary to store disparity values(MAX_COST) for d=-1 and d=D
@@ -555,7 +591,23 @@ static void computeDisparitySGBM( const Mat& img1, const Mat& img2,
                         calcPixelCostBT( img1, img2, k, minD, maxD, mem.pixDiff, mem.tempBuf, mem.getClipTab() );
 
                         memset(hsumAdd, 0, Da*sizeof(CostType));
-#if (CV_SIMD || CV_SIMD_SCALABLE)
+#if CV_RVV // 7367 ms
+                        {
+                            vint16m8_t h_scale = __riscv_vmv_v_x_i16m8((short)SW2 + 1, __riscv_vsetvlmax_e16m8());
+                            int vl;
+                            for (d = 0; d < Da; d += vl) {
+                                vl = __riscv_vsetvl_e16m8(Da - d);
+                                auto v = __riscv_vle16_v_i16m8(mem.pixDiff + d, vl);
+                                auto v_hsumAdd = __riscv_vmul(v, h_scale, vl);
+                                for (x = Da; x <= SW2 * Da; x += Da) {
+                                    auto _v = __riscv_vle16_v_i16m8(mem.pixDiff + x + d, vl);
+                                    v_hsumAdd = __riscv_vadd(v_hsumAdd, _v, vl);
+                                }
+                                __riscv_vse16(hsumAdd + d, v_hsumAdd, vl);
+                            }
+                        }
+#elif (CV_SIMD || CV_SIMD_SCALABLE)
+// #if (CV_SIMD || CV_SIMD_SCALABLE)
                         v_int16 h_scale = vx_setall_s16((short)SW2 + 1);
                         for( d = 0; d < Da; d += VTraits<v_int16>::vlanes() )
                         {
@@ -578,7 +630,19 @@ static void computeDisparitySGBM( const Mat& img1, const Mat& img2,
                             const CostType* hsumSub = mem.getHSumBuf(std::max(y - SH2 - 1, 0));
                             const CostType* Cprev =  mem.getCBuf(y - 1);
 
-#if (CV_SIMD || CV_SIMD_SCALABLE)
+#if CV_RVV
+                            {
+                                int vl;
+                                for (d = 0; d < Da; d += vl) {
+                                    vl = __riscv_vsetvl_e16m8(Da - d);
+                                    vint16m8_t cprev_d   = __riscv_vle16_v_i16m8(Cprev + d,   vl);
+                                    vint16m8_t hsumAdd_d = __riscv_vle16_v_i16m8(hsumAdd + d, vl);
+                                    vint16m8_t hsumSub_d = __riscv_vle16_v_i16m8(hsumSub + d, vl);
+                                    auto res = __riscv_vsub(__riscv_vadd(cprev_d, hsumAdd_d, vl), hsumSub_d, vl);
+                                    __riscv_vse16(C + d, res, vl);
+                                }
+                            }
+#elif (CV_SIMD || CV_SIMD_SCALABLE)
                             for (d = 0; d < Da; d += VTraits<v_int16>::vlanes())
                                 v_store_aligned(C + d, v_sub(v_add(vx_load_aligned(Cprev + d), vx_load_aligned(hsumAdd + d)), vx_load_aligned(hsumSub + d)));
 #else
@@ -590,7 +654,24 @@ static void computeDisparitySGBM( const Mat& img1, const Mat& img2,
                             {
                                 const CostType* pixAdd = mem.pixDiff + std::min(x + SW2*Da, (width1-1)*Da);
                                 const CostType* pixSub = mem.pixDiff + std::max(x - (SW2+1)*Da, 0);
-#if (CV_SIMD || CV_SIMD_SCALABLE)
+#if CV_RVV // 7283 ms
+                            {
+                                int vl;
+                                for (d = 0; d < Da; d += vl) {
+                                    vl = __riscv_vsetvl_e16m8(Da - d);
+                                    vint16m8_t v0 = __riscv_vle16_v_i16m8(hsumAdd + x - Da + d, vl);
+                                    vint16m8_t v1 = __riscv_vle16_v_i16m8(pixSub + d, vl);
+                                    vint16m8_t v2 = __riscv_vle16_v_i16m8(pixAdd + d, vl);
+                                    vint16m8_t hv = __riscv_vadd(__riscv_vsub(v0, v1, vl), v2, vl);
+                                    __riscv_vse16(hsumAdd + x + d, hv, vl);
+
+                                    v0 = __riscv_vle16_v_i16m8(Cprev + x + d, vl);
+                                    v1 = __riscv_vle16_v_i16m8(hsumSub + x + d, vl);
+                                    v2 = __riscv_vadd(__riscv_vsub(v0, v1, vl), hv, vl);
+                                    __riscv_vse16(C + x + d, v2, vl);
+                                }
+                            }
+#elif (CV_SIMD || CV_SIMD_SCALABLE)
                                 for( d = 0; d < Da; d += VTraits<v_int16>::vlanes() )
                                 {
                                     v_int16 hv = v_add(v_sub(vx_load_aligned(hsumAdd + x - Da + d), vx_load_aligned(pixSub + d)), vx_load_aligned(pixAdd + d));
@@ -608,7 +689,20 @@ static void computeDisparitySGBM( const Mat& img1, const Mat& img2,
                         }
                         else
                         {
-#if (CV_SIMD || CV_SIMD_SCALABLE)
+#if CV_RVV // dependent below
+                            short s_scale = k == 0 ? (short)SH2 + 1 : 1;
+                            vint16m8_t v_scale = __riscv_vmv_v_x_i16m8(s_scale, __riscv_vsetvlmax_e16m8());
+                            {
+                                int vl;
+                                for (d = 0; d < Da; d += vl) {
+                                    vl = __riscv_vsetvl_e16m8(Da - d);
+                                    vint16m8_t C_d = __riscv_vle16_v_i16m8(C + d, vl);
+                                    vint16m8_t hsumAdd_d = __riscv_vle16_v_i16m8(hsumAdd + d, vl);
+                                    auto res = __riscv_vadd(C_d, __riscv_vmul(hsumAdd_d, v_scale, vl), vl);
+                                    __riscv_vse16(C + d, res, vl);
+                                }
+                            }
+#elif (CV_SIMD || CV_SIMD_SCALABLE)
                             v_int16 v_scale = vx_setall_s16(k == 0 ? (short)SH2 + 1 : 1);
                             for (d = 0; d < Da; d += VTraits<v_int16>::vlanes())
                                 v_store_aligned(C + d, v_add(vx_load_aligned(C + d), v_mul(vx_load_aligned(hsumAdd + d), v_scale)));
@@ -621,8 +715,23 @@ static void computeDisparitySGBM( const Mat& img1, const Mat& img2,
                             {
                                 const CostType* pixAdd = mem.pixDiff + std::min(x + SW2*Da, (width1-1)*Da);
                                 const CostType* pixSub = mem.pixDiff + std::max(x - (SW2+1)*Da, 0);
+#if CV_RVV // 7198.52 ms
+                            {
+                                int vl;
+                                for (d = 0; d < Da; d += vl) {
+                                    vl = __riscv_vsetvl_e16m8(Da - d);
+                                    vint16m8_t v0 = __riscv_vle16_v_i16m8(hsumAdd + x - Da + d, vl);
+                                    vint16m8_t pixAdd_d = __riscv_vle16_v_i16m8(pixAdd + d, vl);
+                                    vint16m8_t pixSub_d = __riscv_vle16_v_i16m8(pixSub + d, vl);
+                                    auto hv = __riscv_vsub(__riscv_vadd(v0, pixAdd_d, vl), pixSub_d, vl);
+                                    __riscv_vse16(hsumAdd + x + d, hv, vl);
 
-#if (CV_SIMD || CV_SIMD_SCALABLE)
+                                    v0 = __riscv_vle16_v_i16m8(C + x + d, vl);
+                                    auto res = __riscv_vadd(v0, __riscv_vmul(hv, v_scale, vl), vl);
+                                    __riscv_vse16(C + x + d, res, vl);
+                                }
+                            }
+#elif (CV_SIMD || CV_SIMD_SCALABLE)
                                 for (d = 0; d < Da; d += VTraits<v_int16>::vlanes())
                                 {
                                     v_int16 hv = v_sub(v_add(vx_load_aligned(hsumAdd + x - Da + d), vx_load_aligned(pixAdd + d)), vx_load_aligned(pixSub + d));
@@ -646,7 +755,19 @@ static void computeDisparitySGBM( const Mat& img1, const Mat& img2,
                         {
                             const CostType* hsumSub = mem.getHSumBuf(std::max(y - SH2 - 1, 0));
                             const CostType* Cprev = mem.getCBuf(y - 1);
-#if (CV_SIMD || CV_SIMD_SCALABLE)
+#if CV_RVV // 7296.15 ms
+                            {
+                                int vl, width1_Da = width1 * Da;
+                                for (x = 0; x < width1_Da; x += vl) {
+                                    vl = __riscv_vsetvl_e16m8(width1_Da - x);
+                                    vint16m8_t cprev_x = __riscv_vle16_v_i16m8(Cprev + x, vl);
+                                    vint16m8_t hsumSub_x = __riscv_vle16_v_i16m8(hsumSub + x, vl);
+                                    vint16m8_t hsumAdd_x = __riscv_vle16_v_i16m8(hsumAdd + x, vl);
+                                    auto res = __riscv_vadd(__riscv_vsub(cprev_x, hsumSub_x, vl), hsumAdd_x, vl);
+                                    __riscv_vse16(C + x, res, vl);
+                                }
+                            }
+#elif (CV_SIMD || CV_SIMD_SCALABLE)
                             for (x = 0; x < width1*Da; x += VTraits<v_int16>::vlanes())
                                 v_store_aligned(C + x, v_add(v_sub(vx_load_aligned(Cprev + x), vx_load_aligned(hsumSub + x)), vx_load_aligned(hsumAdd + x)));
 #else
@@ -656,7 +777,18 @@ static void computeDisparitySGBM( const Mat& img1, const Mat& img2,
                         }
                         else
                         {
-#if (CV_SIMD || CV_SIMD_SCALABLE)
+#if CV_RVV // 7326.96
+                        {
+                            int vl, width1_Da = width1 * Da;
+                            for (x = 0; x < width1_Da; x += vl) {
+                                vl = __riscv_vsetvl_e16m8(width1_Da - x);
+                                vint16m8_t C_x = __riscv_vle16_v_i16m8(C + x, vl);
+                                vint16m8_t hsumAdd_x = __riscv_vle16_v_i16m8(hsumAdd + x, vl);
+                                auto res = __riscv_vadd(C_x, hsumAdd_x, vl);
+                                __riscv_vse16(C + x, res, vl);
+                            }
+                        }
+#elif (CV_SIMD || CV_SIMD_SCALABLE)
                             for (x = 0; x < width1*Da; x += VTraits<v_int16>::vlanes())
                                 v_store_aligned(C + x, v_add(vx_load_aligned(C + x), vx_load_aligned(hsumAdd + x)));
 #else
@@ -670,7 +802,7 @@ static void computeDisparitySGBM( const Mat& img1, const Mat& img2,
 
                 // also, clear the S buffer
                 mem.clearSBuf(y);
-            }
+            } // pass 1
 
             /*
              [formula 13 in the paper]
@@ -714,6 +846,97 @@ static void computeDisparitySGBM( const Mat& img1, const Mat& img2,
 
                 CostType* minL = mem.getMinLr(lrID, x);
                 d = 0;
+// #if CV_RVV // 8079.37 ms
+//                 {
+//                     vint16m2_t _P1     = __riscv_vmv_v_x_i16m2((short)P1,       __riscv_vsetvlmax_e16m2());
+//                     vint16m2_t _delta0 = __riscv_vmv_v_x_i16m2((short)delta0,   __riscv_vsetvlmax_e16m2());
+//                     vint16m2_t _delta1 = __riscv_vmv_v_x_i16m2((short)delta1,   __riscv_vsetvlmax_e16m2());
+//                     vint16m2_t _delta2 = __riscv_vmv_v_x_i16m2((short)delta2,   __riscv_vsetvlmax_e16m2());
+//                     vint16m2_t _delta3 = __riscv_vmv_v_x_i16m2((short)delta3,   __riscv_vsetvlmax_e16m2());
+//                     vint16m2_t _minL0  = __riscv_vmv_v_x_i16m2((short)MAX_COST, __riscv_vsetvlmax_e16m2());
+//                     vint16m2_t _minL1  = __riscv_vmv_v_x_i16m2((short)MAX_COST, __riscv_vsetvlmax_e16m2());
+//                     vint16m2_t _minL2  = __riscv_vmv_v_x_i16m2((short)MAX_COST, __riscv_vsetvlmax_e16m2());
+//                     vint16m2_t _minL3  = __riscv_vmv_v_x_i16m2((short)MAX_COST, __riscv_vsetvlmax_e16m2());
+
+//                     int vl;
+//                     for (; d < D; d += vl) {
+//                         vl = __riscv_vsetvl_e16m2(D - d);
+
+//                         vint16m2_t Cpd = __riscv_vle16_v_i16m2(Cp + d, vl);
+//                         vint16m2_t Spd = __riscv_vle16_v_i16m2(Sp + d, vl);
+//                         vint16m2_t L;
+
+//                         vint16m2_t v0 = __riscv_vle16_v_i16m2(Lr_p0 + d, vl);
+//                         vint16m2_t v1 = __riscv_vle16_v_i16m2(Lr_p0 + d - 1, vl);
+//                         vint16m2_t v2 = __riscv_vle16_v_i16m2(Lr_p0 + d + 1, vl);
+//                         L = __riscv_vadd(
+//                                 __riscv_vsub(
+//                                     __riscv_vmin(
+//                                         __riscv_vmin(
+//                                             __riscv_vmin(v0, __riscv_vadd(v1, _P1, vl), vl),
+//                                             __riscv_vadd(v2, _P1, vl), vl),
+//                                         _delta0, vl),
+//                                     _delta0, vl),
+//                                 Cpd, vl);
+//                         __riscv_vse16(Lr_p + d, L, vl);
+//                         _minL0 = __riscv_vmin(_minL0, L, vl);
+//                         Spd = __riscv_vadd(Spd, L, vl);
+
+//                         v0 = __riscv_vle16_v_i16m2(Lr_p1 + d, vl);
+//                         v1 = __riscv_vle16_v_i16m2(Lr_p1 + d - 1, vl);
+//                         v2 = __riscv_vle16_v_i16m2(Lr_p1 + d + 1, vl);
+//                         L = __riscv_vadd(
+//                                 __riscv_vsub(
+//                                     __riscv_vmin(
+//                                         __riscv_vmin(
+//                                             __riscv_vmin(v0, __riscv_vadd(v1, _P1, vl), vl),
+//                                             __riscv_vadd(v2, _P1, vl), vl),
+//                                         _delta1, vl),
+//                                     _delta1, vl),
+//                                 Cpd, vl);
+//                         __riscv_vse16(Lr_p + d + Dlra, L, vl);
+//                         _minL1 = __riscv_vmin(_minL1, L, vl);
+//                         Spd = __riscv_vadd(Spd, L, vl);
+
+//                         v0 = __riscv_vle16_v_i16m2(Lr_p2 + d, vl);
+//                         v1 = __riscv_vle16_v_i16m2(Lr_p2 + d - 1, vl);
+//                         v2 = __riscv_vle16_v_i16m2(Lr_p2 + d + 1, vl);
+//                         L = __riscv_vadd(
+//                                 __riscv_vsub(
+//                                     __riscv_vmin(
+//                                         __riscv_vmin(
+//                                             __riscv_vmin(v0, __riscv_vadd(v1, _P1, vl), vl),
+//                                             __riscv_vadd(v2, _P1, vl), vl),
+//                                         _delta2, vl),
+//                                     _delta2, vl),
+//                                 Cpd, vl);
+//                         __riscv_vse16(Lr_p + d + 2 * Dlra, L, vl);
+//                         _minL2 = __riscv_vmin(_minL2, L, vl);
+//                         Spd = __riscv_vadd(Spd, L, vl);
+
+//                         v0 = __riscv_vle16_v_i16m2(Lr_p3 + d, vl);
+//                         v1 = __riscv_vle16_v_i16m2(Lr_p3 + d - 1, vl);
+//                         v2 = __riscv_vle16_v_i16m2(Lr_p3 + d + 1, vl);
+//                         L = __riscv_vadd(
+//                                 __riscv_vsub(
+//                                     __riscv_vmin(
+//                                         __riscv_vmin(
+//                                             __riscv_vmin(v0, __riscv_vadd(v1, _P1, vl), vl),
+//                                             __riscv_vadd(v2, _P1, vl), vl),
+//                                         _delta3, vl),
+//                                     _delta3, vl),
+//                                 Cpd, vl);
+//                         __riscv_vse16(Lr_p + d + 3 * Dlra, L, vl);
+//                         _minL3 = __riscv_vmin(_minL3, L, vl);
+//                         Spd = __riscv_vadd(Spd, L, vl);
+
+//                         __riscv_vse16(Sp + d, Spd, vl);
+//                     }
+//                     minL[0] = __riscv_vmv_x(__riscv_vredmin(_minL0, __riscv_vmv_v_x_i16m1(SHRT_MAX, __riscv_vsetvlmax_e16m1()), vl));
+//                     minL[1] = __riscv_vmv_x(__riscv_vredmin(_minL1, __riscv_vmv_v_x_i16m1(SHRT_MAX, __riscv_vsetvlmax_e16m1()), vl));
+//                     minL[2] = __riscv_vmv_x(__riscv_vredmin(_minL2, __riscv_vmv_v_x_i16m1(SHRT_MAX, __riscv_vsetvlmax_e16m1()), vl));
+//                     minL[3] = __riscv_vmv_x(__riscv_vredmin(_minL3, __riscv_vmv_v_x_i16m1(SHRT_MAX, __riscv_vsetvlmax_e16m1()), vl));
+//                 }
 #if (CV_SIMD || CV_SIMD_SCALABLE)
                 v_int16 _P1 = vx_setall_s16((short)P1);
 
@@ -726,6 +949,7 @@ static void computeDisparitySGBM( const Mat& img1, const Mat& img2,
                 v_int16 _minL2 = vx_setall_s16((short)MAX_COST);
                 v_int16 _minL3 = vx_setall_s16((short)MAX_COST);
 
+                // MODE_SGBM
                 for( ; d <= D - VTraits<v_int16>::vlanes(); d += VTraits<v_int16>::vlanes() )
                 {
                     v_int16 Cpd = vx_load_aligned(Cp + d);
@@ -755,12 +979,12 @@ static void computeDisparitySGBM( const Mat& img1, const Mat& img2,
                     v_store_aligned(Sp + d, Spd);
                 }
 
-#if CV_SIMD_WIDTH > 32
+    #if CV_SIMD_WIDTH > 32
                 minL[0] = v_reduce_min(_minL0);
                 minL[1] = v_reduce_min(_minL1);
                 minL[2] = v_reduce_min(_minL2);
                 minL[3] = v_reduce_min(_minL3);
-#else
+    #else
                 // Get minimum for L0-L3
                 v_int16 t0, t1, t2, t3;
                 v_zip(_minL0, _minL2, t0, t2);
@@ -768,17 +992,17 @@ static void computeDisparitySGBM( const Mat& img1, const Mat& img2,
                 v_zip(v_min(t0, t2), v_min(t1, t3), t0, t1);
                 t0 = v_min(t0, t1);
                 t0 = v_min(t0, v_rotate_right<4>(t0));
-#if CV_SIMD_WIDTH == 32
+        #if CV_SIMD_WIDTH == 32
                 CostType buf[VTraits<v_int16>::max_nlanes];
                 v_store_low(buf, v_min(t0, v_rotate_right<8>(t0)));
                 minL[0] = buf[0];
                 minL[1] = buf[1];
                 minL[2] = buf[2];
                 minL[3] = buf[3];
-#else
+        #else
                 v_store_low(minL, t0);
-#endif
-#endif
+        #endif
+    #endif
 #else
                 minL[0] = MAX_COST;
                 minL[1] = MAX_COST;
@@ -817,7 +1041,19 @@ static void computeDisparitySGBM( const Mat& img1, const Mat& img2,
             if( pass == npasses )
             {
                 x = 0;
-#if (CV_SIMD || CV_SIMD_SCALABLE)
+#if CV_RVV // 8243.45 ms, 7368.23 ms
+                {
+                    vint16m8_t v_inv_dist = __riscv_vmv_v_x_i16m8((DispType)INVALID_DISP_SCALED, __riscv_vsetvlmax_e16m8());
+                    vint16m8_t v_max_cost = __riscv_vmv_v_x_i16m8(MAX_COST                     , __riscv_vsetvlmax_e16m8());
+                    int vl;
+                    for (; x < width; x += vl) {
+                        vl = __riscv_vsetvl_e16m8(width - x);
+                        __riscv_vse16(disp1ptr + x, v_inv_dist, vl);
+                        __riscv_vse16(mem.disp2ptr + x, v_inv_dist, vl);
+                        __riscv_vse16(mem.disp2cost + x, v_max_cost, vl);
+                    }
+                }
+#elif (CV_SIMD || CV_SIMD_SCALABLE)
                 v_int16 v_inv_dist = vx_setall_s16((DispType)INVALID_DISP_SCALED);
                 v_int16 v_max_cost = vx_setall_s16(MAX_COST);
                 for( ; x <= width - VTraits<v_int16>::vlanes(); x += VTraits<v_int16>::vlanes() )
@@ -850,6 +1086,49 @@ static void computeDisparitySGBM( const Mat& img1, const Mat& img2,
                         d = 0;
                         int delta0 = P2 + *mem.getMinLr(lrID, x + 1);
                         int minL0 = MAX_COST;
+// #if CV_RVV // xxx ms, error
+//                         {
+//                             vint16m2_t _P1     = __riscv_vmv_v_x_i16m2((short)P1, __riscv_vsetvlmax_e16m2());
+//                             vint16m2_t _delta0 = __riscv_vmv_v_x_i16m2((short)delta0, __riscv_vsetvlmax_e16m2());
+
+//                             vint16m2_t _minL0    = __riscv_vmv_v_x_i16m2((short)MAX_COST, __riscv_vsetvlmax_e16m2());
+//                             vint16m2_t _minS     = __riscv_vmv_v_x_i16m2((short)MAX_COST, __riscv_vsetvlmax_e16m2());
+//                             vint16m2_t _bestDisp = __riscv_vmv_v_x_i16m2((short)-1, __riscv_vsetvlmax_e16m2());
+
+//                             int vl;
+//                             for (; d < D; d += vl) {
+//                                 vl = __riscv_vsetvl_e16m2(D - d);
+
+//                                 vint16m2_t Cpd = __riscv_vle16_v_i16m2(Cp + d, vl);
+//                                 vint16m2_t v0  = __riscv_vle16_v_i16m2(Lr_p0 + d, vl);
+//                                 vint16m2_t v1  = __riscv_vle16_v_i16m2(Lr_p0 + d - 1, vl);
+//                                 vint16m2_t v2  = __riscv_vle16_v_i16m2(Lr_p0 + d + 1, vl);
+//                                 vint16m2_t L0  = __riscv_vadd(
+//                                                     __riscv_vsub(
+//                                                         __riscv_vmin(
+//                                                             __riscv_vmin(
+//                                                                 __riscv_vmin(v0, __riscv_vadd(v1, _P1, vl), vl),
+//                                                                 __riscv_vadd(v2, _P1, vl), vl),
+//                                                             _delta0, vl),
+//                                                         _delta0, vl),
+//                                                     Cpd, vl);
+//                                 __riscv_vse16(Lr_p + d, L0, vl);
+
+//                                 _minL0 = __riscv_vmin(_minL0, L0, vl);
+//                                 L0 = __riscv_vadd(L0, __riscv_vle16_v_i16m2(Sp + d, vl), vl);
+//                                 __riscv_vse16(Sp + d, L0, vl);
+
+//                                 _bestDisp = __riscv_vmerge(__riscv_vmv_v_x_i16m2((short)d, __riscv_vsetvlmax_e16m2()), _bestDisp, __riscv_vmsgt(_minS, L0, vl), vl);
+//                                 _minS = __riscv_vmin(_minS, L0, vl);
+//                             }
+//                             minL0 = (CostType)__riscv_vmv_x(__riscv_vredmin(_minL0, __riscv_vmv_v_x_i16m1(SHRT_MAX, __riscv_vsetvlmax_e16m1()), vl));
+//                             // min_pos
+//                             minS  = (CostType)__riscv_vmv_x(__riscv_vredmin(_minS , __riscv_vmv_v_x_i16m1(SHRT_MAX, __riscv_vsetvlmax_e16m1()), vl));
+//                             static int16_t seq_s16[32] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31};
+//                             vint16m2_t vseq_s16 = __riscv_vle16_v_i16m2(seq_s16, __riscv_vsetvlmax_e16m2());
+//                             vint16m2_t vmin_pos = __riscv_vmerge(__riscv_vadd(_bestDisp, vseq_s16, vl), __riscv_vmv_v_x_i16m2(SHRT_MAX, __riscv_vsetvlmax_e16m2()), __riscv_vmseq(_minS, __riscv_vmv_v_x_i16m2(minS, __riscv_vsetvlmax_e16m2()), vl), vl);
+//                             bestDisp = (CostType)__riscv_vmv_x(__riscv_vredmin(vmin_pos , __riscv_vmv_v_x_i16m1(SHRT_MAX, __riscv_vsetvlmax_e16m1()), vl));
+//                         }
 #if (CV_SIMD || CV_SIMD_SCALABLE)
                         v_int16 _P1 = vx_setall_s16((short)P1);
                         v_int16 _delta0 = vx_setall_s16((short)delta0);
@@ -955,7 +1234,7 @@ static void computeDisparitySGBM( const Mat& img1, const Mat& img2,
                        0 <= x_ && x_ < width && mem.disp2ptr[x_] >= minD && std::abs(mem.disp2ptr[x_] - d_) > disp12MaxDiff )
                         disp1ptr[x] = (DispType)INVALID_DISP_SCALED;
                 }
-            }
+            } // last pass
 
             lrID = 1 - lrID; // now shift the cyclic buffers
         }

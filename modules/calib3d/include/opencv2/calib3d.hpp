@@ -3504,10 +3504,10 @@ class CV_EXPORTS_W StereoSGBM : public StereoMatcher
 public:
     enum
     {
-        MODE_SGBM = 0,
-        MODE_HH   = 1,
+        MODE_SGBM = 0,  // 5-way, 720P, ~7s
+        MODE_HH   = 1,  // 8-way
         MODE_SGBM_3WAY = 2,
-        MODE_HH4  = 3
+        MODE_HH4  = 3   // 4-way, 720P, ~2s
     };
 
     CV_WRAP virtual int getPreFilterCap() const = 0;

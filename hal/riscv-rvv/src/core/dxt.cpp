@@ -83,16 +83,6 @@ inline int dft(const Complex<T>* src, Complex<T>* dst, int nf, int *factors, T s
         {
             for( i = 0; i < n; i += vl )
             {
-                // vl = TabType::setvl(n - i);
-                // auto vec_itab = TabType::vload_stride(reinterpret_cast<const uint*>(itab + i * tab_step), sizeof(int) * tab_step, vl);
-                // vec_itab = __riscv_vmul(vec_itab, sizeof(T) * 2, vl);
-                // auto vec_src_re = __riscv_vloxei32(reinterpret_cast<const T*>(src), vec_itab, vl);
-                // vec_itab = __riscv_vadd(vec_itab, sizeof(T), vl);
-                // auto vec_src_im = __riscv_vloxei32(reinterpret_cast<const T*>(src), vec_itab, vl);
-                // // [TODO] group re and im and use __riscv_vsseg2e32
-                // TabTypeF::vstore_stride(reinterpret_cast<T*>(dst + i), sizeof(T) * 2, vec_src_re, vl);
-                // TabTypeF::vstore_stride(reinterpret_cast<T*>(dst + i) + 1, sizeof(T) * 2, vec_src_im, vl);
-
                 vl = tab_type::setvl(n - i);
                 auto vec_itab = tab_type::vload_stride(reinterpret_cast<const uint*>(itab + i * tab_step), sizeof(int) * tab_step, vl);
                 vec_itab = __riscv_vmul(vec_itab, sizeof(T) * 2, vl);
@@ -106,17 +96,6 @@ inline int dft(const Complex<T>* src, Complex<T>* dst, int nf, int *factors, T s
         {
             for( i = 0; i < n; i += vl )
             {
-                // vl = TabType::setvl(n - i);
-                // auto vec_itab = TabType::vload_stride(reinterpret_cast<const uint*>(itab + i * tab_step), sizeof(int) * tab_step, vl);
-                // vec_itab = __riscv_vmul(vec_itab, sizeof(T) * 2, vl);
-                // auto vec_src_re = __riscv_vloxei32(reinterpret_cast<const T*>(src), vec_itab, vl);
-                // vec_itab = __riscv_vadd(vec_itab, sizeof(T), vl);
-                // auto vec_src_im = __riscv_vloxei32(reinterpret_cast<const T*>(src), vec_itab, vl);
-                // vec_src_im = __riscv_vfneg(vec_src_im, vl);
-                // // [TODO] group re and im and use __riscv_vsseg2e32
-                // TabTypeF::vstore_stride(reinterpret_cast<T*>(dst + i), sizeof(T) * 2, vec_src_re, vl);
-                // TabTypeF::vstore_stride(reinterpret_cast<T*>(dst + i) + 1, sizeof(T) * 2, vec_src_im, vl);
-
                 vl = tab_type::setvl(n - i);
                 auto vec_itab = tab_type::vload_stride(reinterpret_cast<const uint*>(itab + i * tab_step), sizeof(int) * tab_step, vl);
                 vec_itab = __riscv_vmul(vec_itab, sizeof(T) * 2, vl);
@@ -561,15 +540,6 @@ inline int dft(const Complex<T>* src, Complex<T>* dst, int nf, int *factors, T s
 
         for( i = 0; i < len; i += vl )
         {
-            // vl = TabType::setvl(len - i);
-            // auto vec_src_re = TabTypeF::vload_stride(reinterpret_cast<const T*>(dst + i), sizeof(T) * 2, vl);
-            // auto vec_src_im = TabTypeF::vload_stride(reinterpret_cast<const T*>(dst + i) + 1, sizeof(T) * 2, vl);
-            // vec_src_re = __riscv_vfmul(vec_src_re, re_scale, vl);
-            // vec_src_im = __riscv_vfmul(vec_src_im, im_scale, vl);
-            // // [TODO] group re and im and use __riscv_vsseg2e32
-            // TabTypeF::vstore_stride(reinterpret_cast<T*>(dst + i), sizeof(T) * 2, vec_src_re, vl);
-            // TabTypeF::vstore_stride(reinterpret_cast<T*>(dst + i) + 1, sizeof(T) * 2, vec_src_im, vl);
-
             vl = ftab_type::setvl(len - i);
             auto vec_src_re = ftab_type::vload_stride(reinterpret_cast<const T*>(dst + i), sizeof(T) * 2, vl);
             auto vec_src_im = ftab_type::vload_stride(reinterpret_cast<const T*>(dst + i) + 1, sizeof(T) * 2, vl);

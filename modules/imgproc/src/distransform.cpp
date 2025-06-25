@@ -40,6 +40,7 @@
 //
 //M*/
 #include "precomp.hpp"
+#include "opencv2/core/hal/intrin.hpp"
 
 namespace cv
 {
@@ -86,6 +87,15 @@ distanceTransform_3x3( const Mat& _src, Mat& _temp, Mat& _dist, const float* met
 
     initTopBottom( _temp, BORDER, DIST_MAX );
 
+#if CV_SIMD || CV_SIMD_SCALABLE
+    v_uint32 v_DIAG_DIST = vx_setall_u32(DIAG_DIST);
+    v_uint32 v_HV_DIST   = vx_setall_u32(HV_DIST);
+    v_uint32 v_DIST_MAX  = vx_setall_u32(DIST_MAX);
+    v_uint32 v_zero      = vx_setzero_u32();
+    const int nlanes8  = VTraits<v_uint8>::vlanes();
+    const int nlanes32 = VTraits<v_uint32>::vlanes();
+#endif
+
     // forward pass
     unsigned int* tmp = (unsigned int*)(temp + BORDER*step) + BORDER;
     const uchar* s = src;
@@ -94,7 +104,113 @@ distanceTransform_3x3( const Mat& _src, Mat& _temp, Mat& _dist, const float* met
         for( j = 0; j < BORDER; j++ )
             tmp[-j-1] = tmp[size.width + j] = DIST_MAX;
 
-        for( j = 0; j < size.width; j++ )
+        j = 0;
+#if CV_SIMD || CV_SIMD_SCALABLE
+        for ( ; j < size.width; j += nlanes8)
+        {
+            if (j > size.width - nlanes8)
+            {
+                if (j == 0)
+                    break;
+                j = size.width - nlanes8;
+            }
+            v_uint8 nmask = v_eq(vx_load(s + j), vx_setzero_u8());
+            if (v_check_any(nmask))
+            {
+                vx_store(tmp + j,              v_zero);
+                vx_store(tmp + j + nlanes32,   v_zero);
+                vx_store(tmp + j + nlanes32*2, v_zero);
+                vx_store(tmp + j + nlanes32*3, v_zero);
+            }
+            else
+            {
+                {
+                    v_uint32 t0 = v_add(vx_load(tmp + j - step - 1), v_DIAG_DIST);
+                    v_uint32 t  = v_add(vx_load(tmp + j - step),     v_HV_DIST);
+                    v_uint32 m = v_gt(t0, t); t0 = v_select(m, t, t0);
+
+                    t = v_add(vx_load(tmp + j - step + 1), v_DIAG_DIST);
+                    m = v_gt(t0, t); t0 = v_select(m, t, t0);
+
+                    t = v_add(vx_load(tmp + j - 1), v_HV_DIST);
+                    m = v_gt(t0, t); t0 = v_select(m, t, t0);
+
+                    m = v_gt(t0, v_DIST_MAX);
+                    t0 = v_select(m, v_DIST_MAX, t0);
+
+                    if (!v_check_all(v_not(nmask))) {
+                        v_uint32 nmask0 = v_expand_low(v_expand_low(nmask));
+                        t0 = v_select(nmask0, v_zero, t0);
+                    }
+                    vx_store(tmp + j, t0);
+                }
+
+                {
+                    v_uint32 t0 = v_add(vx_load(tmp + j + nlanes32 - step - 1), v_DIAG_DIST);
+                    v_uint32 t  = v_add(vx_load(tmp + j + nlanes32 - step),     v_HV_DIST);
+                    v_uint32 m = v_gt(t0, t); t0 = v_select(m, t, t0);
+
+                    t = v_add(vx_load(tmp + j + nlanes32 - step + 1), v_DIAG_DIST);
+                    m = v_gt(t0, t); t0 = v_select(m, t, t0);
+
+                    t = v_add(vx_load(tmp + j + nlanes32 - 1),        v_HV_DIST);
+                    m = v_gt(t0, t); t0 = v_select(m, t, t0);
+
+                    m = v_gt(t0, v_DIST_MAX);
+                    t0 = v_select(m, v_DIST_MAX, t0);
+
+                    if (!v_check_all(v_not(nmask))) {
+                        v_uint32 nmask1 = v_expand_high(v_expand_low(nmask));
+                        t0 = v_select(nmask1, v_zero, t0);
+                    }
+                    vx_store(tmp + j + nlanes32, t0);
+                }
+
+                {
+                    v_uint32 t0 = v_add(vx_load(tmp + j + nlanes32*2 - step - 1), v_DIAG_DIST);
+                    v_uint32 t  = v_add(vx_load(tmp + j + nlanes32*2 - step),     v_HV_DIST);
+                    v_uint32 m = v_gt(t0, t); t0 = v_select(m, t, t0);
+
+                    t = v_add(vx_load(tmp + j + nlanes32*2 - step + 1), v_DIAG_DIST);
+                    m = v_gt(t0, t); t0 = v_select(m, t, t0);
+
+                    t = v_add(vx_load(tmp + j + nlanes32*2 - 1),        v_HV_DIST);
+                    m = v_gt(t0, t); t0 = v_select(m, t, t0);
+
+                    m = v_gt(t0, v_DIST_MAX);
+                    t0 = v_select(m, v_DIST_MAX, t0);
+
+                    if (!v_check_all(v_not(nmask))) {
+                        v_uint32 nmask2 = v_expand_high(v_expand_low(nmask));
+                        t0 = v_select(nmask2, v_zero, t0);
+                    }
+                    vx_store(tmp + j + nlanes32*2, t0);
+                }
+
+                {
+                    v_uint32 t0 = v_add(vx_load(tmp + j + nlanes32*3 - step - 1), v_DIAG_DIST);
+                    v_uint32 t  = v_add(vx_load(tmp + j + nlanes32*3 - step),     v_HV_DIST);
+                    v_uint32 m = v_gt(t0, t); t0 = v_select(m, t, t0);
+
+                    t = v_add(vx_load(tmp + j + nlanes32*3 - step + 1), v_DIAG_DIST);
+                    m = v_gt(t0, t); t0 = v_select(m, t, t0);
+
+                    t = v_add(vx_load(tmp + j + nlanes32*3 - 1),        v_HV_DIST);
+                    m = v_gt(t0, t); t0 = v_select(m, t, t0);
+
+                    m = v_gt(t0, v_DIST_MAX);
+                    t0 = v_select(m, v_DIST_MAX, t0);
+
+                    if (!v_check_all(v_not(nmask))) {
+                        v_uint32 nmask3 = v_expand_high(v_expand_low(nmask));
+                        t0 = v_select(nmask3, v_zero, t0);
+                    }
+                    vx_store(tmp + j + nlanes32*3, t0);
+                }
+            }
+        }
+#else
+        for( ; j < size.width; j++ )
         {
             if( !s[j] )
                 tmp[j] = 0;
@@ -110,6 +226,7 @@ distanceTransform_3x3( const Mat& _src, Mat& _temp, Mat& _dist, const float* met
                 tmp[j] = (t0 > DIST_MAX) ? DIST_MAX : t0;
             }
         }
+#endif
         tmp += step;
         s += srcstep;
     }

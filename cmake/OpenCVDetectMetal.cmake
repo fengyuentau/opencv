@@ -3,6 +3,8 @@ include(CheckLanguage)
 set(HAVE_METAL OFF)
 set(METAL_LIBRARIES "")
 
+# The initial runtime uses baseline Metal compute APIs and does not require
+# version-specific Metal Shading Language features.
 if(APPLE)
   check_language(OBJCXX)
   if(CMAKE_OBJCXX_COMPILER)

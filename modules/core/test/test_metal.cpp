@@ -2,6 +2,8 @@
 // It is subject to the license terms in the LICENSE file found in the top-level directory
 // of this distribution and at http://opencv.org/license.html.
 
+#if defined(HAVE_METAL)
+
 #include "test_precomp.hpp"
 #include "opencv2/core/metal.hpp"
 
@@ -9,9 +11,6 @@ namespace opencv_test { namespace {
 
 TEST(Core_Metal, Add8U)
 {
-    if (!cv::metal::haveMetal())
-        throw SkipTestException("Metal is not available");
-
     Mat src1(32, 32, CV_8UC3);
     Mat src2(src1.size(), src1.type());
     randu(src1, 0, 255);
@@ -28,9 +27,6 @@ TEST(Core_Metal, Add8U)
 
 TEST(Core_Metal, Add32F)
 {
-    if (!cv::metal::haveMetal())
-        throw SkipTestException("Metal is not available");
-
     Mat src1(32, 32, CV_32FC1);
     Mat src2(src1.size(), src1.type());
     randu(src1, -10.0f, 10.0f);
@@ -46,3 +42,5 @@ TEST(Core_Metal, Add32F)
 }
 
 }} // namespace
+
+#endif

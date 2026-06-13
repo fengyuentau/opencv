@@ -293,7 +293,7 @@ OCV_OPTION(WITH_HALIDE "Include Halide support" OFF
 OCV_OPTION(WITH_VULKAN "Include Vulkan support" OFF
   VISIBLE_IF TRUE
   VERIFY HAVE_VULKAN)
-OCV_OPTION(WITH_METAL "Include Apple Metal support" OFF
+OCV_OPTION(WITH_METAL "Include Apple Metal support (Metal 1.0 compute APIs)" OFF
   VISIBLE_IF APPLE
   VERIFY HAVE_METAL)
 # replacement for deprecated options: WITH_INF_ENGINE, WITH_NGRAPH

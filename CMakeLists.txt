@@ -293,6 +293,9 @@ OCV_OPTION(WITH_HALIDE "Include Halide support" OFF
 OCV_OPTION(WITH_VULKAN "Include Vulkan support" OFF
   VISIBLE_IF TRUE
   VERIFY HAVE_VULKAN)
+OCV_OPTION(WITH_METAL "Include Apple Metal support" OFF
+  VISIBLE_IF APPLE
+  VERIFY HAVE_METAL)
 # replacement for deprecated options: WITH_INF_ENGINE, WITH_NGRAPH
 OCV_OPTION(WITH_OPENVINO "Include Intel OpenVINO toolkit support" (WITH_INF_ENGINE)
   VISIBLE_IF TRUE
@@ -895,6 +898,11 @@ endif()
 # --- VkCom ---
 if(WITH_VULKAN)
   include(cmake/OpenCVDetectVulkan.cmake)
+endif()
+
+# --- Metal ---
+if(WITH_METAL)
+  include(cmake/OpenCVDetectMetal.cmake)
 endif()
 
 # --- WebNN ---
@@ -1946,6 +1954,14 @@ if(WITH_VULKAN OR HAVE_VULKAN)
   if(HAVE_VULKAN)
     status("    Include path:"  VULKAN_INCLUDE_DIRS THEN "${VULKAN_INCLUDE_DIRS}" ELSE "NO")
     status("    Link libraries:" VULKAN_LIBRARIES THEN "${VULKAN_LIBRARIES}" ELSE "Dynamic load")
+  endif()
+endif()
+
+if(WITH_METAL OR HAVE_METAL)
+  status("")
+  status("  Metal:"      HAVE_METAL THEN "YES" ELSE "NO")
+  if(HAVE_METAL)
+    status("    Link libraries:" METAL_LIBRARIES THEN "${METAL_LIBRARIES}" ELSE "NO")
   endif()
 endif()
 

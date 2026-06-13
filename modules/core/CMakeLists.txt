@@ -97,6 +97,11 @@ source_group("Src" FILES "${OPENCV_MODULE_opencv_core_BINARY_DIR}/version_string
 ocv_glob_module_sources(SOURCES "${OPENCV_MODULE_opencv_core_BINARY_DIR}/version_string.inc"
                         HEADERS ${core_parallel_hdrs} ${module_opencl_hdrs} ${lib_cuda_hdrs} ${lib_cuda_hdrs_detail})
 
+if(NOT HAVE_METAL)
+  list(REMOVE_ITEM OPENCV_MODULE_${the_module}_SOURCES "${CMAKE_CURRENT_LIST_DIR}/src/metal_runtime.mm")
+  set(OPENCV_MODULE_${the_module}_SOURCES ${OPENCV_MODULE_${the_module}_SOURCES} CACHE INTERNAL "List of source files for ${the_module}" FORCE)
+endif()
+
 ocv_module_include_directories(${the_module} ${ZLIB_INCLUDE_DIRS} ${OPENCL_INCLUDE_DIRS})
 if(ANDROID AND HAVE_CPUFEATURES)
   ocv_append_source_file_compile_definitions(${CMAKE_CURRENT_SOURCE_DIR}/src/system.cpp "HAVE_CPUFEATURES=1")
@@ -169,6 +174,10 @@ if(HAVE_CUDA)
    list(APPEND extra_libs CUDA::cudart${CUDA_LIB_EXT})
   endif()
   ocv_warnings_disable(CMAKE_CXX_FLAGS -Wundef -Wenum-compare -Wunused-function -Wshadow)
+endif()
+
+if(HAVE_METAL)
+  list(APPEND extra_libs ${METAL_LIBRARIES})
 endif()
 
 ocv_create_module(${extra_libs})

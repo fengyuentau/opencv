@@ -1,0 +1,17 @@
+include(CheckLanguage)
+
+set(HAVE_METAL OFF)
+set(METAL_LIBRARIES "")
+
+if(APPLE)
+  check_language(OBJCXX)
+  if(CMAKE_OBJCXX_COMPILER)
+    enable_language(OBJCXX)
+    find_library(METAL_FRAMEWORK Metal)
+    find_library(FOUNDATION_FRAMEWORK Foundation)
+    if(METAL_FRAMEWORK AND FOUNDATION_FRAMEWORK)
+      set(HAVE_METAL ON)
+      set(METAL_LIBRARIES ${METAL_FRAMEWORK} ${FOUNDATION_FRAMEWORK})
+    endif()
+  endif()
+endif()

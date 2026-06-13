@@ -19,8 +19,13 @@ TEST(Core_Metal, Add8U)
     Mat expected;
     cv::add(src1, src2, expected);
 
+    cv::metal::MetalMat metalSrc1(src1);
+    cv::metal::MetalMat metalSrc2(src2);
+    cv::metal::MetalMat metalDst;
+    cv::metal::add(metalSrc1, metalSrc2, metalDst);
+
     Mat actual;
-    cv::metal::add(src1, src2, actual);
+    metalDst.download(actual);
 
     EXPECT_LE(cvtest::norm(actual, expected, NORM_INF), 0);
 }
@@ -35,8 +40,13 @@ TEST(Core_Metal, Add32F)
     Mat expected;
     cv::add(src1, src2, expected);
 
+    cv::metal::MetalMat metalSrc1(src1);
+    cv::metal::MetalMat metalSrc2(src2);
+    cv::metal::MetalMat metalDst;
+    cv::metal::add(metalSrc1, metalSrc2, metalDst);
+
     Mat actual;
-    cv::metal::add(src1, src2, actual);
+    metalDst.download(actual);
 
     EXPECT_LE(cvtest::norm(actual, expected, NORM_INF), 1e-6);
 }

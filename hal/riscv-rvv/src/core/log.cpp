@@ -302,30 +302,31 @@ static constexpr double log_tab_64f[log_tab_size] = LOG_TAB_VALUE;
 
 int log32f(const float* src, float* dst, int _len)
 {
-    size_t vl = __riscv_vsetvlmax_e32m4();
-    auto log_a2 = __riscv_vfmv_v_f_f32m4(detail::log32f_a2, vl);
+    size_t vl;
     for (size_t len = _len; len > 0; len -= vl, src += vl, dst += vl)
     {
-        vl = __riscv_vsetvl_e32m4(len);
-        auto i0 = __riscv_vle32_v_i32m4((const int32_t*)src, vl);
+        vl = __riscv_vsetvl_e32m8(len);
+        auto i0 = __riscv_vle32_v_i32m8((const int32_t*)src, vl);
 
         auto buf_i = __riscv_vor(__riscv_vand(i0, detail::log32f_mask, vl), 127 << 23, vl);
-        auto idx = __riscv_vreinterpret_u32m4(__riscv_vand(
+        auto idx = __riscv_vreinterpret_u32m8(__riscv_vand(
             __riscv_vsra(i0, 23 - detail::log_scale - 1 - 2, vl),
             detail::log_mask << 2,
             vl));
 
         auto tab_v = __riscv_vluxei32(detail::log_tab_32f, idx, vl);
         auto y0_i = __riscv_vsub(__riscv_vand(__riscv_vsra(i0, 23, vl), 0xff, vl), 127, vl);
-        auto y0 = __riscv_vfmadd(__riscv_vfcvt_f_x_v_f32m4(y0_i, vl), detail::ln_2, tab_v, vl);
+        auto y0 = __riscv_vfmadd(__riscv_vfcvt_f_x_v_f32m8(y0_i, vl), detail::ln_2, tab_v, vl);
 
         tab_v = __riscv_vluxei32(detail::log_tab_32f, __riscv_vadd(idx, 4, vl), vl);
-        auto buf_f = __riscv_vreinterpret_f32m4(buf_i);
+        auto mask = __riscv_vmfeq(tab_v, 0.5f, vl);
+        auto buf_f = __riscv_vreinterpret_f32m8(buf_i);
         auto x0 = __riscv_vfmul(__riscv_vfsub(buf_f, 1.f, vl), tab_v, vl);
-        x0 = __riscv_vfsub_mu(__riscv_vmseq(idx, (uint32_t)510 * 4, vl), x0, x0, 1.f / 512, vl);
+        x0 = __riscv_vfsub_mu(mask, x0, x0, 1.f / 512, vl);
 
         auto res = __riscv_vfadd(__riscv_vfmul(x0, detail::log32f_a0, vl), detail::log32f_a1, vl);
-        res = __riscv_vfmadd(res, x0, log_a2, vl);
+        auto coefficient = __riscv_vfmv_v_f_f32m8(detail::log32f_a2, vl);
+        res = __riscv_vfmadd(res, x0, coefficient, vl);
         res = __riscv_vfmadd(res, x0, y0, vl);
 
         __riscv_vse32(dst, res, vl);
@@ -336,11 +337,7 @@ int log32f(const float* src, float* dst, int _len)
 
 int log64f(const double* src, double* dst, int _len)
 {
-    size_t vl = __riscv_vsetvlmax_e64m4();
-    // all vector registers are used up, so not load more constants
-    auto log_a5 = __riscv_vfmv_v_f_f64m4(detail::log64f_a5, vl);
-    auto log_a6 = __riscv_vfmv_v_f_f64m4(detail::log64f_a6, vl);
-    auto log_a7 = __riscv_vfmv_v_f_f64m4(detail::log64f_a7, vl);
+    size_t vl;
     for (size_t len = _len; len > 0; len -= vl, src += vl, dst += vl)
     {
         vl = __riscv_vsetvl_e64m4(len);
@@ -361,14 +358,15 @@ int log64f(const double* src, double* dst, int _len)
         auto x0 = __riscv_vfmul(__riscv_vfsub(buf_f, 1.0, vl), tab_v, vl);
         x0 = __riscv_vfsub_mu(__riscv_vmseq(idx, (uint64_t)510 * 8, vl), x0, x0, 1. / 512, vl);
 
-        auto res = __riscv_vfadd(__riscv_vfmul(x0, detail::log64f_a0, vl), detail::log64f_a1, vl);
-        res = __riscv_vfadd(__riscv_vfmul(x0, res, vl), detail::log64f_a2, vl);
-        res = __riscv_vfadd(__riscv_vfmul(x0, res, vl), detail::log64f_a3, vl);
-        res = __riscv_vfadd(__riscv_vfmul(x0, res, vl), detail::log64f_a4, vl);
-        res = __riscv_vfmadd(res, x0, log_a5, vl);
-        res = __riscv_vfmadd(res, x0, log_a6, vl);
-        res = __riscv_vfmadd(res, x0, log_a7, vl);
-        res = __riscv_vfmadd(res, x0, y0, vl);
+        auto xq = __riscv_vfmul(x0, x0, vl);
+        auto res0 = __riscv_vfadd(__riscv_vfmul(xq, detail::log64f_a0, vl), detail::log64f_a2, vl);
+        auto res1 = __riscv_vfadd(__riscv_vfmul(xq, detail::log64f_a1, vl), detail::log64f_a3, vl);
+        res0 = __riscv_vfadd(__riscv_vfmul(xq, res0, vl), detail::log64f_a4, vl);
+        res1 = __riscv_vfadd(__riscv_vfmul(xq, res1, vl), detail::log64f_a5, vl);
+        res0 = __riscv_vfadd(__riscv_vfmul(xq, res0, vl), detail::log64f_a6, vl);
+        res1 = __riscv_vfadd(__riscv_vfmul(xq, res1, vl), detail::log64f_a7, vl);
+        res1 = __riscv_vfmadd(res1, x0, y0, vl);
+        auto res = __riscv_vfmadd(res0, xq, res1, vl);
 
         __riscv_vse64(dst, res, vl);
     }

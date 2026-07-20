@@ -97,10 +97,10 @@ __attribute__((always_inline)) inline VEC_T
 {
     const auto ax = __riscv_vfabs(vx, vl);
     const auto ay = __riscv_vfabs(vy, vl);
-    // Reciprocal Estimate (vfrec7) is not accurate enough to pass the test of cartToPolar.
-    const auto c = __riscv_vfdiv(__riscv_vfmin(ax, ay, vl),
-                                 __riscv_vfadd(__riscv_vfmax(ax, ay, vl), FLT_EPSILON, vl),
-                                 vl);
+    // The two Newton refinements in __riscv_vfrec preserve cartToPolar accuracy.
+    const auto denominator = __riscv_vfadd(__riscv_vfmax(ax, ay, vl), FLT_EPSILON, vl);
+    const auto c = __riscv_vfmul(__riscv_vfmin(ax, ay, vl),
+                                 __riscv_vfrec(denominator, vl), vl);
     const auto c2 = __riscv_vfmul(c, c, vl);
 
     // Using vfmadd only results in about a 2% performance improvement, but it occupies 3 additional

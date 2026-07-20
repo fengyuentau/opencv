@@ -112,38 +112,38 @@ static constexpr double exp_tab_64f[exp_tab_size] = EXP_TAB_VALUE;
 
 int exp32f(const float* src, float* dst, int _len)
 {
-    size_t vl = __riscv_vsetvlmax_e32m4();
-    auto exp_a2 = __riscv_vfmv_v_f_f32m4(detail::exp32f_a2, vl);
-    auto exp_a3 = __riscv_vfmv_v_f_f32m4(detail::exp32f_a3, vl);
-    auto exp_a4 = __riscv_vfmv_v_f_f32m4(detail::exp32f_a4, vl);
+    size_t vl;
     for (size_t len = _len; len > 0; len -= vl, src += vl, dst += vl)
     {
-        vl = __riscv_vsetvl_e32m4(len);
-        auto x0 = __riscv_vle32_v_f32m4(src, vl);
+        vl = __riscv_vsetvl_e32m8(len);
+        auto x0 = __riscv_vle32_v_f32m8(src, vl);
 
         x0 = __riscv_vfmax(x0, detail::exp_min_val, vl);
         x0 = __riscv_vfmin(x0, detail::exp_max_val, vl);
         x0 = __riscv_vfmul(x0, detail::exp_prescale, vl);
 
-        auto xi = __riscv_vfcvt_rtz_x_f_v_i32m4(x0, vl);
-        x0 = __riscv_vfsub(x0, __riscv_vfcvt_f_x_v_f32m4(xi, vl), vl);
+        auto xi = __riscv_vfcvt_rtz_x_f_v_i32m8(x0, vl);
+        x0 = __riscv_vfsub(x0, __riscv_vfcvt_f_x_v_f32m8(xi, vl), vl);
         x0 = __riscv_vfmul(x0, detail::exp_postscale, vl);
 
         auto t = __riscv_vsra(xi, detail::exp_scale, vl);
         t = __riscv_vadd(t, 127, vl);
         t = __riscv_vmax(t, 0, vl);
         t = __riscv_vmin(t, 255, vl);
-        auto buf = __riscv_vreinterpret_f32m4(__riscv_vsll(t, 23, vl));
+        auto buf = __riscv_vreinterpret_f32m8(__riscv_vsll(t, 23, vl));
 
-        auto _xi = __riscv_vreinterpret_u32m4(xi);
+        auto _xi = __riscv_vreinterpret_u32m8(xi);
         _xi = __riscv_vsll(__riscv_vand(_xi, detail::exp_mask, vl), 2, vl);
         auto tab_v = __riscv_vluxei32(detail::exp_tab_32f, _xi, vl);
 
         auto res = __riscv_vfmul(buf, tab_v, vl);
         auto xn = __riscv_vfadd(x0, detail::exp32f_a1, vl);
-        xn = __riscv_vfmadd(xn, x0, exp_a2, vl);
-        xn = __riscv_vfmadd(xn, x0, exp_a3, vl);
-        xn = __riscv_vfmadd(xn, x0, exp_a4, vl);
+        auto coefficient = __riscv_vfmv_v_f_f32m8(detail::exp32f_a2, vl);
+        xn = __riscv_vfmadd(xn, x0, coefficient, vl);
+        coefficient = __riscv_vfmv_v_f_f32m8(detail::exp32f_a3, vl);
+        xn = __riscv_vfmadd(xn, x0, coefficient, vl);
+        coefficient = __riscv_vfmv_v_f_f32m8(detail::exp32f_a4, vl);
+        xn = __riscv_vfmadd(xn, x0, coefficient, vl);
 
         res = __riscv_vfmul(res, xn, vl);
         __riscv_vse32(dst, res, vl);
@@ -154,41 +154,40 @@ int exp32f(const float* src, float* dst, int _len)
 
 int exp64f(const double* src, double* dst, int _len)
 {
-    size_t vl = __riscv_vsetvlmax_e64m4();
-    // all vector registers are used up, so not load more constants
-    auto exp_a2 = __riscv_vfmv_v_f_f64m4(detail::exp64f_a2, vl);
-    auto exp_a3 = __riscv_vfmv_v_f_f64m4(detail::exp64f_a3, vl);
-    auto exp_a4 = __riscv_vfmv_v_f_f64m4(detail::exp64f_a4, vl);
-    auto exp_a5 = __riscv_vfmv_v_f_f64m4(detail::exp64f_a5, vl);
+    size_t vl;
     for (size_t len = _len; len > 0; len -= vl, src += vl, dst += vl)
     {
-        vl = __riscv_vsetvl_e64m4(len);
-        auto x0 = __riscv_vle64_v_f64m4(src, vl);
+        vl = __riscv_vsetvl_e64m8(len);
+        auto x0 = __riscv_vle64_v_f64m8(src, vl);
 
         x0 = __riscv_vfmax(x0, detail::exp_min_val, vl);
         x0 = __riscv_vfmin(x0, detail::exp_max_val, vl);
         x0 = __riscv_vfmul(x0, detail::exp_prescale, vl);
 
-        auto xi = __riscv_vfcvt_rtz_x_f_v_i64m4(x0, vl);
-        x0 = __riscv_vfsub(x0, __riscv_vfcvt_f_x_v_f64m4(xi, vl), vl);
+        auto xi = __riscv_vfcvt_rtz_x_f_v_i64m8(x0, vl);
+        x0 = __riscv_vfsub(x0, __riscv_vfcvt_f_x_v_f64m8(xi, vl), vl);
         x0 = __riscv_vfmul(x0, detail::exp_postscale, vl);
 
         auto t = __riscv_vsra(xi, detail::exp_scale, vl);
         t = __riscv_vadd(t, 1023, vl);
         t = __riscv_vmax(t, 0, vl);
         t = __riscv_vmin(t, 2047, vl);
-        auto buf = __riscv_vreinterpret_f64m4(__riscv_vsll(t, 52, vl));
+        auto buf = __riscv_vreinterpret_f64m8(__riscv_vsll(t, 52, vl));
 
-        auto _xi = __riscv_vreinterpret_u64m4(xi);
+        auto _xi = __riscv_vreinterpret_u64m8(xi);
         _xi = __riscv_vsll(__riscv_vand(_xi, detail::exp_mask, vl), 3, vl);
         auto tab_v = __riscv_vluxei64(detail::exp_tab_64f, _xi, vl);
 
         auto res = __riscv_vfmul(buf, tab_v, vl);
         auto xn = __riscv_vfadd(__riscv_vfmul(x0, detail::exp64f_a0, vl), detail::exp64f_a1, vl);
-        xn = __riscv_vfmadd(xn, x0, exp_a2, vl);
-        xn = __riscv_vfmadd(xn, x0, exp_a3, vl);
-        xn = __riscv_vfmadd(xn, x0, exp_a4, vl);
-        xn = __riscv_vfmadd(xn, x0, exp_a5, vl);
+        auto coefficient = __riscv_vfmv_v_f_f64m8(detail::exp64f_a2, vl);
+        xn = __riscv_vfmadd(xn, x0, coefficient, vl);
+        coefficient = __riscv_vfmv_v_f_f64m8(detail::exp64f_a3, vl);
+        xn = __riscv_vfmadd(xn, x0, coefficient, vl);
+        coefficient = __riscv_vfmv_v_f_f64m8(detail::exp64f_a4, vl);
+        xn = __riscv_vfmadd(xn, x0, coefficient, vl);
+        coefficient = __riscv_vfmv_v_f_f64m8(detail::exp64f_a5, vl);
+        xn = __riscv_vfmadd(xn, x0, coefficient, vl);
 
         res = __riscv_vfmul(res, xn, vl);
         __riscv_vse64(dst, res, vl);

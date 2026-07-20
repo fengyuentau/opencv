@@ -256,17 +256,31 @@ struct NormDiffL1_RVV<int, double> {
 template<>
 struct NormDiffL1_RVV<float, double> {
     double operator() (const float* src1, const float* src2, int n) const {
-        int vlmax = __riscv_vsetvlmax_e32m4();
-        auto s = __riscv_vfmv_v_f_f64m8(0, vlmax);
-        int vl;
-        for (int i = 0; i < n; i += vl) {
-            vl = __riscv_vsetvl_e32m4(n - i);
-            auto v1 = __riscv_vle32_v_f32m4(src1 + i, vl);
-            auto v2 = __riscv_vle32_v_f32m4(src2 + i, vl);
-            auto v = __riscv_vfabs(__riscv_vfsub(v1, v2, vl), vl);
-            s = __riscv_vfadd_tu(s, s, __riscv_vfwcvt_f(v, vl), vl);
+        int vlmax = __riscv_vsetvlmax_e64m4();
+        auto s0 = __riscv_vfmv_v_f_f64m4(0, vlmax);
+        auto s1 = __riscv_vfmv_v_f_f64m4(0, vlmax);
+        auto one = __riscv_vfmv_v_f_f32m2(1, vlmax);
+        int i = 0;
+        for (; n - i >= 2 * vlmax; i += 2 * vlmax) {
+            auto v10 = __riscv_vle32_v_f32m2(src1 + i, vlmax);
+            auto v20 = __riscv_vle32_v_f32m2(src2 + i, vlmax);
+            auto v0 = __riscv_vfabs(__riscv_vfsub(v10, v20, vlmax), vlmax);
+            s0 = __riscv_vfwmacc_vv_f64m4_tu(s0, one, v0, vlmax);
+            auto v11 = __riscv_vle32_v_f32m2(src1 + i + vlmax, vlmax);
+            auto v21 = __riscv_vle32_v_f32m2(src2 + i + vlmax, vlmax);
+            auto v1 = __riscv_vfabs(__riscv_vfsub(v11, v21, vlmax), vlmax);
+            s1 = __riscv_vfwmacc_vv_f64m4_tu(s1, one, v1, vlmax);
         }
-        return __riscv_vfmv_f(__riscv_vfredosum(s, __riscv_vfmv_s_f_f64m1(0, __riscv_vsetvlmax_e64m1()), vlmax));
+        int vl;
+        for (; i < n; i += vl) {
+            vl = __riscv_vsetvl_e32m2(n - i);
+            auto v1 = __riscv_vle32_v_f32m2(src1 + i, vl);
+            auto v2 = __riscv_vle32_v_f32m2(src2 + i, vl);
+            auto v = __riscv_vfabs(__riscv_vfsub(v1, v2, vl), vl);
+            s0 = __riscv_vfwmacc_vv_f64m4_tu(s0, one, v, vl);
+        }
+        s0 = __riscv_vfadd(s0, s1, vlmax);
+        return __riscv_vfmv_f(__riscv_vfredosum(s0, __riscv_vfmv_s_f_f64m1(0, vlmax), vlmax));
     }
 };
 
@@ -376,18 +390,30 @@ struct NormDiffL2_RVV<int, double> {
 template<>
 struct NormDiffL2_RVV<float, double> {
     double operator() (const float* src1, const float* src2, int n) const {
-        int vlmax = __riscv_vsetvlmax_e32m4();
-        auto s = __riscv_vfmv_v_f_f64m8(0, vlmax);
-        int vl;
-        for (int i = 0; i < n; i += vl) {
-            vl = __riscv_vsetvl_e32m4(n - i);
-            auto v1 = __riscv_vle32_v_f32m4(src1 + i, vl);
-            auto v2 = __riscv_vle32_v_f32m4(src2 + i, vl);
-            auto v = __riscv_vfsub(v1, v2, vl);
-            auto v_mul = __riscv_vfwmul(v, v, vl);
-            s = __riscv_vfadd_tu(s, s, v_mul, vl);
+        int vlmax = __riscv_vsetvlmax_e64m4();
+        auto s0 = __riscv_vfmv_v_f_f64m4(0, vlmax);
+        auto s1 = __riscv_vfmv_v_f_f64m4(0, vlmax);
+        int i = 0;
+        for (; n - i >= 2 * vlmax; i += 2 * vlmax) {
+            auto v10 = __riscv_vle32_v_f32m2(src1 + i, vlmax);
+            auto v20 = __riscv_vle32_v_f32m2(src2 + i, vlmax);
+            auto v0 = __riscv_vfsub(v10, v20, vlmax);
+            s0 = __riscv_vfwmacc_vv_f64m4_tu(s0, v0, v0, vlmax);
+            auto v11 = __riscv_vle32_v_f32m2(src1 + i + vlmax, vlmax);
+            auto v21 = __riscv_vle32_v_f32m2(src2 + i + vlmax, vlmax);
+            auto v1 = __riscv_vfsub(v11, v21, vlmax);
+            s1 = __riscv_vfwmacc_vv_f64m4_tu(s1, v1, v1, vlmax);
         }
-        return __riscv_vfmv_f(__riscv_vfredosum(s, __riscv_vfmv_s_f_f64m1(0, __riscv_vsetvlmax_e64m1()), vlmax));
+        int vl;
+        for (; i < n; i += vl) {
+            vl = __riscv_vsetvl_e32m2(n - i);
+            auto v1 = __riscv_vle32_v_f32m2(src1 + i, vl);
+            auto v2 = __riscv_vle32_v_f32m2(src2 + i, vl);
+            auto v = __riscv_vfsub(v1, v2, vl);
+            s0 = __riscv_vfwmacc_vv_f64m4_tu(s0, v, v, vl);
+        }
+        s0 = __riscv_vfadd(s0, s1, vlmax);
+        return __riscv_vfmv_f(__riscv_vfredosum(s0, __riscv_vfmv_s_f_f64m1(0, vlmax), vlmax));
     }
 };
 
@@ -505,6 +531,22 @@ struct MaskedNormDiffInf_RVV<uchar, int> {
 template<>
 struct MaskedNormDiffInf_RVV<schar, int> {
     int operator() (const schar* src1, const schar* src2, const uchar* mask, int len, int cn) const {
+        if (cn == 1) {
+            int vlmax = __riscv_vsetvlmax_e8m4();
+            auto s = __riscv_vmv_v_x_u8m4(0, vlmax);
+            int vl;
+            for (int i = 0; i < len; i += vl) {
+                vl = __riscv_vsetvl_e8m4(len - i);
+                auto v1 = __riscv_vle8_v_i8m4(src1 + i, vl);
+                auto v2 = __riscv_vle8_v_i8m4(src2 + i, vl);
+                auto v = common::__riscv_vabd(v1, v2, vl);
+                auto m = __riscv_vle8_v_u8m4(mask + i, vl);
+                auto b = __riscv_vmsne(m, 0, vl);
+                s = __riscv_vmaxu_tumu(b, s, s, v, vl);
+            }
+            return __riscv_vmv_x(__riscv_vredmaxu(s, __riscv_vmv_s_x_u8m1(0, __riscv_vsetvlmax_e8m1()), vlmax));
+        }
+
         int vlmax = __riscv_vsetvlmax_e8m8();
         auto s = __riscv_vmv_v_x_u8m8(0, vlmax);
         for (int cn_index = 0; cn_index < cn; cn_index++) {
@@ -526,6 +568,22 @@ struct MaskedNormDiffInf_RVV<schar, int> {
 template<>
 struct MaskedNormDiffInf_RVV<ushort, int> {
     int operator() (const ushort* src1, const ushort* src2, const uchar* mask, int len, int cn) const {
+        if (cn == 1) {
+            int vlmax = __riscv_vsetvlmax_e16m4();
+            auto s = __riscv_vmv_v_x_u16m4(0, vlmax);
+            int vl;
+            for (int i = 0; i < len; i += vl) {
+                vl = __riscv_vsetvl_e16m4(len - i);
+                auto v1 = __riscv_vle16_v_u16m4(src1 + i, vl);
+                auto v2 = __riscv_vle16_v_u16m4(src2 + i, vl);
+                auto v = __riscv_vsub(__riscv_vmaxu(v1, v2, vl), __riscv_vminu(v1, v2, vl), vl);
+                auto m = __riscv_vle8_v_u8m2(mask + i, vl);
+                auto b = __riscv_vmsne(m, 0, vl);
+                s = __riscv_vmaxu_tumu(b, s, s, v, vl);
+            }
+            return __riscv_vmv_x(__riscv_vredmaxu(s, __riscv_vmv_s_x_u16m1(0, __riscv_vsetvlmax_e16m1()), vlmax));
+        }
+
         int vlmax = __riscv_vsetvlmax_e16m8();
         auto s = __riscv_vmv_v_x_u16m8(0, vlmax);
         for (int cn_index = 0; cn_index < cn; cn_index++) {
@@ -547,6 +605,22 @@ struct MaskedNormDiffInf_RVV<ushort, int> {
 template<>
 struct MaskedNormDiffInf_RVV<short, int> {
     int operator() (const short* src1, const short* src2, const uchar* mask, int len, int cn) const {
+        if (cn == 1) {
+            int vlmax = __riscv_vsetvlmax_e16m4();
+            auto s = __riscv_vmv_v_x_u16m4(0, vlmax);
+            int vl;
+            for (int i = 0; i < len; i += vl) {
+                vl = __riscv_vsetvl_e16m4(len - i);
+                auto v1 = __riscv_vle16_v_i16m4(src1 + i, vl);
+                auto v2 = __riscv_vle16_v_i16m4(src2 + i, vl);
+                auto v = __riscv_vreinterpret_u16m4(__riscv_vsub(__riscv_vmax(v1, v2, vl), __riscv_vmin(v1, v2, vl), vl));
+                auto m = __riscv_vle8_v_u8m2(mask + i, vl);
+                auto b = __riscv_vmsne(m, 0, vl);
+                s = __riscv_vmaxu_tumu(b, s, s, v, vl);
+            }
+            return __riscv_vmv_x(__riscv_vredmaxu(s, __riscv_vmv_s_x_u16m1(0, __riscv_vsetvlmax_e16m1()), vlmax));
+        }
+
         int vlmax = __riscv_vsetvlmax_e16m8();
         auto s = __riscv_vmv_v_x_u16m8(0, vlmax);
         for (int cn_index = 0; cn_index < cn; cn_index++) {
@@ -568,6 +642,22 @@ struct MaskedNormDiffInf_RVV<short, int> {
 template<>
 struct MaskedNormDiffInf_RVV<int, int> {
     int operator() (const int* src1, const int* src2, const uchar* mask, int len, int cn) const {
+        if (cn == 1) {
+            int vlmax = __riscv_vsetvlmax_e32m4();
+            auto s = __riscv_vmv_v_x_u32m4(0, vlmax);
+            int vl;
+            for (int i = 0; i < len; i += vl) {
+                vl = __riscv_vsetvl_e32m4(len - i);
+                auto v1 = __riscv_vle32_v_i32m4(src1 + i, vl);
+                auto v2 = __riscv_vle32_v_i32m4(src2 + i, vl);
+                auto v = common::__riscv_vabs(__riscv_vsub(v1, v2, vl), vl);
+                auto m = __riscv_vle8_v_u8m1(mask + i, vl);
+                auto b = __riscv_vmsne(m, 0, vl);
+                s = __riscv_vmaxu_tumu(b, s, s, v, vl);
+            }
+            return __riscv_vmv_x(__riscv_vredmaxu(s, __riscv_vmv_s_x_u32m1(0, __riscv_vsetvlmax_e32m1()), vlmax));
+        }
+
         int vlmax = __riscv_vsetvlmax_e32m8();
         auto s = __riscv_vmv_v_x_u32m8(0, vlmax);
         for (int cn_index = 0; cn_index < cn; cn_index++) {
@@ -692,6 +782,20 @@ struct MaskedNormDiffL1_RVV<schar, int> {
     int operator() (const schar* src1, const schar* src2, const uchar* mask, int len, int cn) const {
         auto s = __riscv_vmv_v_x_u32m1(0, __riscv_vsetvlmax_e32m1());
         auto zero = __riscv_vmv_v_x_u16m1(0, __riscv_vsetvlmax_e16m1());
+        if (cn == 1) {
+            int vl;
+            for (int i = 0; i < len; i += vl) {
+                vl = __riscv_vsetvl_e8m8(len - i);
+                auto v1 = __riscv_vle8_v_i8m8(src1 + i, vl);
+                auto v2 = __riscv_vle8_v_i8m8(src2 + i, vl);
+                auto v = common::__riscv_vabd(v1, v2, vl);
+                auto m = __riscv_vle8_v_u8m8(mask + i, vl);
+                auto b = __riscv_vmsne(m, 0, vl);
+                s = __riscv_vwredsumu(__riscv_vwredsumu_tum(b, zero, v, zero, vl), s, __riscv_vsetvlmax_e16m1());
+            }
+            return __riscv_vmv_x(s);
+        }
+
         for (int cn_index = 0; cn_index < cn; cn_index++) {
             int vl;
             for (int i = 0; i < len; i += vl) {
@@ -712,6 +816,20 @@ template<>
 struct MaskedNormDiffL1_RVV<ushort, int> {
     int operator() (const ushort* src1, const ushort* src2, const uchar* mask, int len, int cn) const {
         auto s = __riscv_vmv_v_x_u32m1(0, __riscv_vsetvlmax_e32m1());
+        if (cn == 1) {
+            int vl;
+            for (int i = 0; i < len; i += vl) {
+                vl = __riscv_vsetvl_e8m4(len - i);
+                auto v1 = __riscv_vle16_v_u16m8(src1 + i, vl);
+                auto v2 = __riscv_vle16_v_u16m8(src2 + i, vl);
+                auto v = common::__riscv_vabd(v1, v2, vl);
+                auto m = __riscv_vle8_v_u8m4(mask + i, vl);
+                auto b = __riscv_vmsne(m, 0, vl);
+                s = __riscv_vwredsumu_tum(b, s, v, s, vl);
+            }
+            return __riscv_vmv_x(s);
+        }
+
         for (int cn_index = 0; cn_index < cn; cn_index++) {
             int vl;
             for (int i = 0; i < len; i += vl) {
@@ -732,6 +850,20 @@ template<>
 struct MaskedNormDiffL1_RVV<short, int> {
     int operator() (const short* src1, const short* src2, const uchar* mask, int len, int cn) const {
         auto s = __riscv_vmv_v_x_u32m1(0, __riscv_vsetvlmax_e32m1());
+        if (cn == 1) {
+            int vl;
+            for (int i = 0; i < len; i += vl) {
+                vl = __riscv_vsetvl_e8m4(len - i);
+                auto v1 = __riscv_vle16_v_i16m8(src1 + i, vl);
+                auto v2 = __riscv_vle16_v_i16m8(src2 + i, vl);
+                auto v = common::__riscv_vabd(v1, v2, vl);
+                auto m = __riscv_vle8_v_u8m4(mask + i, vl);
+                auto b = __riscv_vmsne(m, 0, vl);
+                s = __riscv_vwredsumu_tum(b, s, v, s, vl);
+            }
+            return __riscv_vmv_x(s);
+        }
+
         for (int cn_index = 0; cn_index < cn; cn_index++) {
             int vl;
             for (int i = 0; i < len; i += vl) {
@@ -753,6 +885,20 @@ struct MaskedNormDiffL1_RVV<int, double> {
     double operator() (const int* src1, const int* src2, const uchar* mask, int len, int cn) const {
         int vlmax = __riscv_vsetvlmax_e32m4();
         auto s = __riscv_vfmv_v_f_f64m8(0, vlmax);
+        if (cn == 1) {
+            int vl;
+            for (int i = 0; i < len; i += vl) {
+                vl = __riscv_vsetvl_e32m4(len - i);
+                auto v1 = __riscv_vle32_v_i32m4(src1 + i, vl);
+                auto v2 = __riscv_vle32_v_i32m4(src2 + i, vl);
+                auto v = common::__riscv_vabs(__riscv_vsub(v1, v2, vl), vl);
+                auto m = __riscv_vle8_v_u8m1(mask + i, vl);
+                auto b = __riscv_vmsne(m, 0, vl);
+                s = __riscv_vfadd_tumu(b, s, s, __riscv_vfwcvt_f(b, v, vl), vl);
+            }
+            return __riscv_vfmv_f(__riscv_vfredosum(s, __riscv_vfmv_s_f_f64m1(0, __riscv_vsetvlmax_e64m1()), vlmax));
+        }
+
         for (int cn_index = 0; cn_index < cn; cn_index++) {
             int vl;
             for (int i = 0; i < len; i += vl) {
@@ -773,31 +919,52 @@ struct MaskedNormDiffL1_RVV<int, double> {
 template<>
 struct MaskedNormDiffL1_RVV<float, double> {
     double operator() (const float* src1, const float* src2, const uchar* mask, int len, int cn) const {
+        if (cn == 1) {
+            int vlmax = __riscv_vsetvlmax_e64m4();
+            auto s0 = __riscv_vfmv_v_f_f64m4(0, vlmax);
+            auto s1 = __riscv_vfmv_v_f_f64m4(0, vlmax);
+            auto one = __riscv_vfmv_v_f_f32m2(1, vlmax);
+            int i = 0;
+            for (; len - i >= 2 * vlmax; i += 2 * vlmax) {
+                auto v10 = __riscv_vle32_v_f32m2(src1 + i, vlmax);
+                auto v20 = __riscv_vle32_v_f32m2(src2 + i, vlmax);
+                auto v0 = __riscv_vfabs(__riscv_vfsub(v10, v20, vlmax), vlmax);
+                auto m0 = __riscv_vle8_v_u8mf2(mask + i, vlmax);
+                auto b0 = __riscv_vmsne_vx_u8mf2_b16(m0, 0, vlmax);
+                s0 = __riscv_vfwmacc_vv_f64m4_tumu(b0, s0, one, v0, vlmax);
+                auto v11 = __riscv_vle32_v_f32m2(src1 + i + vlmax, vlmax);
+                auto v21 = __riscv_vle32_v_f32m2(src2 + i + vlmax, vlmax);
+                auto v1 = __riscv_vfabs(__riscv_vfsub(v11, v21, vlmax), vlmax);
+                auto m1 = __riscv_vle8_v_u8mf2(mask + i + vlmax, vlmax);
+                auto b1 = __riscv_vmsne_vx_u8mf2_b16(m1, 0, vlmax);
+                s1 = __riscv_vfwmacc_vv_f64m4_tumu(b1, s1, one, v1, vlmax);
+            }
+            int vl;
+            for (; i < len; i += vl) {
+                vl = __riscv_vsetvl_e32m2(len - i);
+                auto v1 = __riscv_vle32_v_f32m2(src1 + i, vl);
+                auto v2 = __riscv_vle32_v_f32m2(src2 + i, vl);
+                auto v = __riscv_vfabs(__riscv_vfsub(v1, v2, vl), vl);
+                auto m = __riscv_vle8_v_u8mf2(mask + i, vl);
+                auto b = __riscv_vmsne_vx_u8mf2_b16(m, 0, vl);
+                s0 = __riscv_vfwmacc_vv_f64m4_tumu(b, s0, one, v, vl);
+            }
+            s0 = __riscv_vfadd(s0, s1, vlmax);
+            return __riscv_vfmv_f(__riscv_vfredosum(s0, __riscv_vfmv_s_f_f64m1(0, vlmax), vlmax));
+        }
+
         int vlmax = __riscv_vsetvlmax_e32m4();
         auto s = __riscv_vfmv_v_f_f64m8(0, vlmax);
-        if (cn == 1) {
+        for (int cn_index = 0; cn_index < cn; cn_index++) {
             int vl;
             for (int i = 0; i < len; i += vl) {
                 vl = __riscv_vsetvl_e32m4(len - i);
-                auto v1 = __riscv_vle32_v_f32m4(src1 + i, vl);
-                auto v2 = __riscv_vle32_v_f32m4(src2 + i, vl);
+                auto v1 = __riscv_vlse32_v_f32m4(src1 + cn * i + cn_index, sizeof(float) * cn, vl);
+                auto v2 = __riscv_vlse32_v_f32m4(src2 + cn * i + cn_index, sizeof(float) * cn, vl);
                 auto v = __riscv_vfabs(__riscv_vfsub(v1, v2, vl), vl);
                 auto m = __riscv_vle8_v_u8m1(mask + i, vl);
                 auto b = __riscv_vmsne(m, 0, vl);
                 s = __riscv_vfadd_tumu(b, s, s, __riscv_vfwcvt_f(b, v, vl), vl);
-            }
-        } else {
-            for (int cn_index = 0; cn_index < cn; cn_index++) {
-                int vl;
-                for (int i = 0; i < len; i += vl) {
-                    vl = __riscv_vsetvl_e32m4(len - i);
-                    auto v1 = __riscv_vlse32_v_f32m4(src1 + cn * i + cn_index, sizeof(float) * cn, vl);
-                    auto v2 = __riscv_vlse32_v_f32m4(src2 + cn * i + cn_index, sizeof(float) * cn, vl);
-                    auto v = __riscv_vfabs(__riscv_vfsub(v1, v2, vl), vl);
-                    auto m = __riscv_vle8_v_u8m1(mask + i, vl);
-                    auto b = __riscv_vmsne(m, 0, vl);
-                    s = __riscv_vfadd_tumu(b, s, s, __riscv_vfwcvt_f(b, v, vl), vl);
-                }
             }
         }
         return __riscv_vfmv_f(__riscv_vfredosum(s, __riscv_vfmv_s_f_f64m1(0, __riscv_vsetvlmax_e64m1()), vlmax));
@@ -873,6 +1040,20 @@ template<>
 struct MaskedNormDiffL2_RVV<schar, int> {
     int operator() (const schar* src1, const schar* src2, const uchar* mask, int len, int cn) const {
         auto s = __riscv_vmv_v_x_u32m1(0, __riscv_vsetvlmax_e32m1());
+        if (cn == 1) {
+            int vl;
+            for (int i = 0; i < len; i += vl) {
+                vl = __riscv_vsetvl_e8m4(len - i);
+                auto v1 = __riscv_vle8_v_i8m4(src1 + i, vl);
+                auto v2 = __riscv_vle8_v_i8m4(src2 + i, vl);
+                auto v = common::__riscv_vabd(v1, v2, vl);
+                auto m = __riscv_vle8_v_u8m4(mask + i, vl);
+                auto b = __riscv_vmsne(m, 0, vl);
+                s = __riscv_vwredsumu(b, __riscv_vwmulu(b, v, v, vl), s, vl);
+            }
+            return __riscv_vmv_x(s);
+        }
+
         for (int cn_index = 0; cn_index < cn; cn_index++) {
             int vl;
             for (int i = 0; i < len; i += vl) {
@@ -894,6 +1075,21 @@ struct MaskedNormDiffL2_RVV<ushort, double> {
     double operator() (const ushort* src1, const ushort* src2, const uchar* mask, int len, int cn) const {
         int vlmax = __riscv_vsetvlmax_e16m2();
         auto s = __riscv_vfmv_v_f_f64m8(0, vlmax);
+        if (cn == 1) {
+            int vl;
+            for (int i = 0; i < len; i += vl) {
+                vl = __riscv_vsetvl_e16m2(len - i);
+                auto v1 = __riscv_vle16_v_u16m2(src1 + i, vl);
+                auto v2 = __riscv_vle16_v_u16m2(src2 + i, vl);
+                auto v = common::__riscv_vabd(v1, v2, vl);
+                auto m = __riscv_vle8_v_u8m1(mask + i, vl);
+                auto b = __riscv_vmsne(m, 0, vl);
+                auto v_mul = __riscv_vwmulu(b, v, v, vl);
+                s = __riscv_vfadd_tumu(b, s, s, __riscv_vfwcvt_f(b, v_mul, vl), vl);
+            }
+            return __riscv_vfmv_f(__riscv_vfredosum(s, __riscv_vfmv_s_f_f64m1(0, __riscv_vsetvlmax_e64m1()), vlmax));
+        }
+
         for (int cn_index = 0; cn_index < cn; cn_index++) {
             int vl;
             for (int i = 0; i < len; i += vl) {
@@ -916,6 +1112,21 @@ struct MaskedNormDiffL2_RVV<short, double> {
     double operator() (const short* src1, const short* src2, const uchar* mask, int len, int cn) const {
         int vlmax = __riscv_vsetvlmax_e16m2();
         auto s = __riscv_vfmv_v_f_f64m8(0, vlmax);
+        if (cn == 1) {
+            int vl;
+            for (int i = 0; i < len; i += vl) {
+                vl = __riscv_vsetvl_e16m2(len - i);
+                auto v1 = __riscv_vle16_v_i16m2(src1 + i, vl);
+                auto v2 = __riscv_vle16_v_i16m2(src2 + i, vl);
+                auto v = common::__riscv_vabd(v1, v2, vl);
+                auto m = __riscv_vle8_v_u8m1(mask + i, vl);
+                auto b = __riscv_vmsne(m, 0, vl);
+                auto v_mul = __riscv_vwmulu(b, v, v, vl);
+                s = __riscv_vfadd_tumu(b, s, s, __riscv_vfwcvt_f(b, v_mul, vl), vl);
+            }
+            return __riscv_vfmv_f(__riscv_vfredosum(s, __riscv_vfmv_s_f_f64m1(0, __riscv_vsetvlmax_e64m1()), vlmax));
+        }
+
         for (int cn_index = 0; cn_index < cn; cn_index++) {
             int vl;
             for (int i = 0; i < len; i += vl) {
@@ -938,6 +1149,21 @@ struct MaskedNormDiffL2_RVV<int, double> {
     double operator() (const int* src1, const int* src2, const uchar* mask, int len, int cn) const {
         int vlmax = __riscv_vsetvlmax_e32m4();
         auto s = __riscv_vfmv_v_f_f64m8(0, vlmax);
+        if (cn == 1) {
+            int vl;
+            for (int i = 0; i < len; i += vl) {
+                vl = __riscv_vsetvl_e32m4(len - i);
+                auto v1 = __riscv_vle32_v_i32m4(src1 + i, vl);
+                auto v2 = __riscv_vle32_v_i32m4(src2 + i, vl);
+                auto v = common::__riscv_vabd(v1, v2, vl);
+                auto m = __riscv_vle8_v_u8m1(mask + i, vl);
+                auto b = __riscv_vmsne(m, 0, vl);
+                auto v_mul = __riscv_vwmulu(b, v, v, vl);
+                s = __riscv_vfadd_tumu(b, s, s, __riscv_vfcvt_f(b, v_mul, vl), vl);
+            }
+            return __riscv_vfmv_f(__riscv_vfredosum(s, __riscv_vfmv_s_f_f64m1(0, __riscv_vsetvlmax_e64m1()), vlmax));
+        }
+
         for (int cn_index = 0; cn_index < cn; cn_index++) {
             int vl;
             for (int i = 0; i < len; i += vl) {
@@ -958,33 +1184,52 @@ struct MaskedNormDiffL2_RVV<int, double> {
 template<>
 struct MaskedNormDiffL2_RVV<float, double> {
     double operator() (const float* src1, const float* src2, const uchar* mask, int len, int cn) const {
+        if (cn == 1) {
+            int vlmax = __riscv_vsetvlmax_e64m4();
+            auto s0 = __riscv_vfmv_v_f_f64m4(0, vlmax);
+            auto s1 = __riscv_vfmv_v_f_f64m4(0, vlmax);
+            int i = 0;
+            for (; len - i >= 2 * vlmax; i += 2 * vlmax) {
+                auto v10 = __riscv_vle32_v_f32m2(src1 + i, vlmax);
+                auto v20 = __riscv_vle32_v_f32m2(src2 + i, vlmax);
+                auto v0 = __riscv_vfsub(v10, v20, vlmax);
+                auto m0 = __riscv_vle8_v_u8mf2(mask + i, vlmax);
+                auto b0 = __riscv_vmsne_vx_u8mf2_b16(m0, 0, vlmax);
+                s0 = __riscv_vfwmacc_vv_f64m4_tumu(b0, s0, v0, v0, vlmax);
+                auto v11 = __riscv_vle32_v_f32m2(src1 + i + vlmax, vlmax);
+                auto v21 = __riscv_vle32_v_f32m2(src2 + i + vlmax, vlmax);
+                auto v1 = __riscv_vfsub(v11, v21, vlmax);
+                auto m1 = __riscv_vle8_v_u8mf2(mask + i + vlmax, vlmax);
+                auto b1 = __riscv_vmsne_vx_u8mf2_b16(m1, 0, vlmax);
+                s1 = __riscv_vfwmacc_vv_f64m4_tumu(b1, s1, v1, v1, vlmax);
+            }
+            int vl;
+            for (; i < len; i += vl) {
+                vl = __riscv_vsetvl_e32m2(len - i);
+                auto v1 = __riscv_vle32_v_f32m2(src1 + i, vl);
+                auto v2 = __riscv_vle32_v_f32m2(src2 + i, vl);
+                auto v = __riscv_vfsub(v1, v2, vl);
+                auto m = __riscv_vle8_v_u8mf2(mask + i, vl);
+                auto b = __riscv_vmsne_vx_u8mf2_b16(m, 0, vl);
+                s0 = __riscv_vfwmacc_vv_f64m4_tumu(b, s0, v, v, vl);
+            }
+            s0 = __riscv_vfadd(s0, s1, vlmax);
+            return __riscv_vfmv_f(__riscv_vfredosum(s0, __riscv_vfmv_s_f_f64m1(0, vlmax), vlmax));
+        }
+
         int vlmax = __riscv_vsetvlmax_e32m4();
         auto s = __riscv_vfmv_v_f_f64m8(0, vlmax);
-        if (cn == 1) {
+        for (int cn_index = 0; cn_index < cn; cn_index++) {
             int vl;
             for (int i = 0; i < len; i += vl) {
                 vl = __riscv_vsetvl_e32m4(len - i);
-                auto v1 = __riscv_vle32_v_f32m4(src1 + i, vl);
-                auto v2 = __riscv_vle32_v_f32m4(src2 + i, vl);
+                auto v1 = __riscv_vlse32_v_f32m4(src1 + cn * i + cn_index, sizeof(float) * cn, vl);
+                auto v2 = __riscv_vlse32_v_f32m4(src2 + cn * i + cn_index, sizeof(float) * cn, vl);
                 auto v = __riscv_vfsub(v1, v2, vl);
                 auto m = __riscv_vle8_v_u8m1(mask + i, vl);
                 auto b = __riscv_vmsne(m, 0, vl);
                 auto v_mul = __riscv_vfwmul(b, v, v, vl);
                 s = __riscv_vfadd_tumu(b, s, s, v_mul, vl);
-            }
-        } else {
-            for (int cn_index = 0; cn_index < cn; cn_index++) {
-                int vl;
-                for (int i = 0; i < len; i += vl) {
-                    vl = __riscv_vsetvl_e32m4(len - i);
-                    auto v1 = __riscv_vlse32_v_f32m4(src1 + cn * i + cn_index, sizeof(float) * cn, vl);
-                    auto v2 = __riscv_vlse32_v_f32m4(src2 + cn * i + cn_index, sizeof(float) * cn, vl);
-                    auto v = __riscv_vfsub(v1, v2, vl);
-                    auto m = __riscv_vle8_v_u8m1(mask + i, vl);
-                    auto b = __riscv_vmsne(m, 0, vl);
-                    auto v_mul = __riscv_vfwmul(b, v, v, vl);
-                    s = __riscv_vfadd_tumu(b, s, s, v_mul, vl);
-                }
             }
         }
         return __riscv_vfmv_f(__riscv_vfredosum(s, __riscv_vfmv_s_f_f64m1(0, __riscv_vsetvlmax_e64m1()), vlmax));

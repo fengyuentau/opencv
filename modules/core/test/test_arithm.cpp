@@ -2882,6 +2882,38 @@ TEST(Core_MeanStdDev, regression_multichannel)
     }
 }
 
+TEST(Core_MeanStdDev, nonbinary_mask_and_optional_mean)
+{
+    Vec4b data[] = {
+        Vec4b(1, 2, 3, 4), Vec4b(5, 6, 7, 8), Vec4b(9, 10, 11, 12)
+    };
+    uchar mask_data[] = { 0, 2, 255 };
+    Mat src(1, 3, CV_8UC4, data);
+    Mat mask(1, 3, CV_8U, mask_data);
+
+    Scalar mean, stddev;
+    meanStdDev(src, mean, stddev, mask);
+    Scalar masked_mean = cv::mean(src, mask);
+    for (int c = 0; c < 4; ++c)
+    {
+        EXPECT_DOUBLE_EQ(7.0 + c, mean[c]);
+        EXPECT_DOUBLE_EQ(7.0 + c, masked_mean[c]);
+        EXPECT_DOUBLE_EQ(2.0, stddev[c]);
+    }
+
+    Mat stddev_only;
+    meanStdDev(src, cv::noArray(), stddev_only, mask);
+    ASSERT_EQ(4u, stddev_only.total());
+    for (int c = 0; c < 4; ++c)
+        EXPECT_DOUBLE_EQ(2.0, stddev_only.ptr<double>()[c]);
+
+    float float_data[] = { 1.0f, 5.0f, 9.0f };
+    Mat float_src(1, 3, CV_32F, float_data);
+    meanStdDev(float_src, mean, stddev, mask);
+    EXPECT_DOUBLE_EQ(7.0, mean[0]);
+    EXPECT_DOUBLE_EQ(2.0, stddev[0]);
+}
+
 // Related issue : https://github.com/opencv/opencv/issues/26861
 TEST(Core_MeanStdDevTest, LargeImage)
 {

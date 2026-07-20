@@ -24,6 +24,8 @@ static inline vbool2_t vlt(const vuint16m8_t  &a, const vuint16m8_t  &b, const i
 static inline vbool2_t vlt(const vint16m8_t   &a, const vint16m8_t   &b, const int vl) { return __riscv_vmslt(a, b, vl); }
 static inline vbool4_t vlt(const vint32m8_t   &a, const vint32m8_t   &b, const int vl) { return __riscv_vmslt(a, b, vl); }
 static inline vbool4_t vlt(const vfloat32m8_t &a, const vfloat32m8_t &b, const int vl) { return __riscv_vmflt(a, b, vl); }
+static inline vbool8_t vlt(const vint32m4_t   &a, const vint32m4_t   &b, const int vl) { return __riscv_vmslt(a, b, vl); }
+static inline vbool8_t vlt(const vfloat32m4_t &a, const vfloat32m4_t &b, const int vl) { return __riscv_vmflt(a, b, vl); }
 
 static inline vbool1_t vle(const vuint8m8_t   &a, const vuint8m8_t   &b, const int vl) { return __riscv_vmsleu(a, b, vl); }
 static inline vbool1_t vle(const vint8m8_t    &a, const vint8m8_t    &b, const int vl) { return __riscv_vmsle(a, b, vl); }
@@ -31,6 +33,8 @@ static inline vbool2_t vle(const vuint16m8_t  &a, const vuint16m8_t  &b, const i
 static inline vbool2_t vle(const vint16m8_t   &a, const vint16m8_t   &b, const int vl) { return __riscv_vmsle(a, b, vl); }
 static inline vbool4_t vle(const vint32m8_t   &a, const vint32m8_t   &b, const int vl) { return __riscv_vmsle(a, b, vl); }
 static inline vbool4_t vle(const vfloat32m8_t &a, const vfloat32m8_t &b, const int vl) { return __riscv_vmfle(a, b, vl); }
+static inline vbool8_t vle(const vint32m4_t   &a, const vint32m4_t   &b, const int vl) { return __riscv_vmsle(a, b, vl); }
+static inline vbool8_t vle(const vfloat32m4_t &a, const vfloat32m4_t &b, const int vl) { return __riscv_vmfle(a, b, vl); }
 
 static inline vbool1_t veq(const vuint8m8_t   &a, const vuint8m8_t   &b, const int vl) { return __riscv_vmseq(a, b, vl); }
 static inline vbool1_t veq(const vint8m8_t    &a, const vint8m8_t    &b, const int vl) { return __riscv_vmseq(a, b, vl); }
@@ -38,6 +42,8 @@ static inline vbool2_t veq(const vuint16m8_t  &a, const vuint16m8_t  &b, const i
 static inline vbool2_t veq(const vint16m8_t   &a, const vint16m8_t   &b, const int vl) { return __riscv_vmseq(a, b, vl); }
 static inline vbool4_t veq(const vint32m8_t   &a, const vint32m8_t   &b, const int vl) { return __riscv_vmseq(a, b, vl); }
 static inline vbool4_t veq(const vfloat32m8_t &a, const vfloat32m8_t &b, const int vl) { return __riscv_vmfeq(a, b, vl); }
+static inline vbool8_t veq(const vint32m4_t   &a, const vint32m4_t   &b, const int vl) { return __riscv_vmseq(a, b, vl); }
+static inline vbool8_t veq(const vfloat32m4_t &a, const vfloat32m4_t &b, const int vl) { return __riscv_vmfeq(a, b, vl); }
 
 static inline vbool1_t vne(const vuint8m8_t   &a, const vuint8m8_t   &b, const int vl) { return __riscv_vmsne(a, b, vl); }
 static inline vbool1_t vne(const vint8m8_t    &a, const vint8m8_t    &b, const int vl) { return __riscv_vmsne(a, b, vl); }
@@ -45,17 +51,44 @@ static inline vbool2_t vne(const vuint16m8_t  &a, const vuint16m8_t  &b, const i
 static inline vbool2_t vne(const vint16m8_t   &a, const vint16m8_t   &b, const int vl) { return __riscv_vmsne(a, b, vl); }
 static inline vbool4_t vne(const vint32m8_t   &a, const vint32m8_t   &b, const int vl) { return __riscv_vmsne(a, b, vl); }
 static inline vbool4_t vne(const vfloat32m8_t &a, const vfloat32m8_t &b, const int vl) { return __riscv_vmfne(a, b, vl); }
+static inline vbool8_t vne(const vint32m4_t   &a, const vint32m4_t   &b, const int vl) { return __riscv_vmsne(a, b, vl); }
+static inline vbool8_t vne(const vfloat32m4_t &a, const vfloat32m4_t &b, const int vl) { return __riscv_vmfne(a, b, vl); }
 
-#define CV_HAL_RVV_COMPARE_OP(op_name) \
+template <typename T> struct use_pair_relational : std::integral_constant<bool, sizeof(T) == 4> {};
+template <typename T> struct use_pair_equality : std::is_same<T, float> {};
+
+#define CV_HAL_RVV_COMPARE_OP(op_name, pair_trait) \
 template <typename _Tps> \
 struct op_name { \
     using in = RVV<_Tps, LMUL_8>; \
     using out = RVV<uint8_t, getLMUL(sizeof(_Tps))>; \
+    using half_in = RVV<_Tps, LMUL_4>; \
+    using half_out = RVV<uint8_t, LMUL_1>; \
     constexpr static uint8_t one = 255; \
+    static inline int run_pair(const _Tps *, const _Tps *, uchar *, const int, std::false_type) { \
+        return 0; \
+    } \
+    static inline int run_pair(const _Tps *src1, const _Tps *src2, uchar *dst, const int len, std::true_type) { \
+        auto zero = half_out::vmv(0, half_out::setvlmax()); \
+        const int vlmax = static_cast<int>(half_in::setvlmax()); \
+        int i = 0; \
+        for (; len - i >= 2 * vlmax; i += 2 * vlmax) { \
+            auto v10 = half_in::vload(src1 + i, vlmax); \
+            auto v20 = half_in::vload(src2 + i, vlmax); \
+            auto m0 = v##op_name(v10, v20, vlmax); \
+            auto v11 = half_in::vload(src1 + i + vlmax, vlmax); \
+            auto v21 = half_in::vload(src2 + i + vlmax, vlmax); \
+            auto m1 = v##op_name(v11, v21, vlmax); \
+            half_out::vstore(dst + i, __riscv_vmerge(zero, one, m0, vlmax), vlmax); \
+            half_out::vstore(dst + i + vlmax, __riscv_vmerge(zero, one, m1, vlmax), vlmax); \
+        } \
+        return i; \
+    } \
     static inline void run(const _Tps *src1, const _Tps *src2, uchar *dst, const int len) { \
         auto zero = out::vmv(0, out::setvlmax()); \
+        int i = run_pair(src1, src2, dst, len, pair_trait<_Tps>()); \
         int vl; \
-        for (int i = 0; i < len; i += vl) { \
+        for (; i < len; i += vl) { \
             vl = in::setvl(len - i); \
             auto v1 = in::vload(src1 + i, vl); \
             auto v2 = in::vload(src2 + i, vl); \
@@ -65,15 +98,16 @@ struct op_name { \
     } \
 };
 
-CV_HAL_RVV_COMPARE_OP(lt)
-CV_HAL_RVV_COMPARE_OP(le)
-CV_HAL_RVV_COMPARE_OP(eq)
-CV_HAL_RVV_COMPARE_OP(ne)
+CV_HAL_RVV_COMPARE_OP(lt, use_pair_relational)
+CV_HAL_RVV_COMPARE_OP(le, use_pair_relational)
+CV_HAL_RVV_COMPARE_OP(eq, use_pair_equality)
+CV_HAL_RVV_COMPARE_OP(ne, use_pair_equality)
 
 template <template<typename _Tps> class op, typename _Tps> static inline
 int compare_impl(const _Tps *src1_data, size_t src1_step, const _Tps *src2_data, size_t src2_step,
                  uchar *dst_data, size_t dst_step, int width, int height) {
-    if (src1_step == src2_step && src1_step == dst_step && src1_step == width * sizeof(_Tps)) {
+    const size_t src_width = static_cast<size_t>(width) * sizeof(_Tps);
+    if (src1_step == src_width && src2_step == src_width && dst_step == static_cast<size_t>(width)) {
         width *= height;
         height = 1;
     }

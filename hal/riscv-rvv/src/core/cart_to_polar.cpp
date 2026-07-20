@@ -28,8 +28,10 @@ inline int cartToPolar(const T* x, const T* y, T* mag, T* angle, int len, bool a
 
         auto vmag = common::sqrt<2>(__riscv_vfmadd(vx, vx, __riscv_vfmul(vy, vy, vl), vl), vl);
         RVV_T::vstore(mag, RVV_T::cast(vmag, vl), vl);
+        // Keep the magnitude store ahead of atan to limit peak RVV register pressure.
+        asm volatile("" ::: "memory");
 
-        auto vangle = common::rvv_atan(vy, vx, vl, atan_params);
+        auto vangle = common::rvv_atan(vy, vx, vl, atan_params, true);
         RVV_T::vstore(angle, RVV_T::cast(vangle, vl), vl);
     }
 

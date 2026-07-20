@@ -68,6 +68,18 @@ inline vfloat32m4_t __riscv_vfrec(const vfloat32m4_t &x, const int vl) {
     return rec;
 }
 
+inline vfloat32m4_t vfrec_lowreg(const vfloat32m4_t &x, const int vl) {
+    auto rec = __riscv_vfrec7(x, vl);
+    auto cls = __riscv_vfclass(rec, vl);
+    auto m = __riscv_vmseq(__riscv_vand(cls, 0b10111000, vl), 0, vl);
+    // Scalar vfrsub avoids keeping an LMUL4 2.0 vector live across both refinements.
+    auto t = __riscv_vfrsub(__riscv_vfmul(x, rec, vl), 2.f, vl);
+    rec = __riscv_vfmul_mu(m, rec, t, rec, vl);
+    t = __riscv_vfrsub(__riscv_vfmul(x, rec, vl), 2.f, vl);
+    rec = __riscv_vfmul_mu(m, rec, t, rec, vl);
+    return rec;
+}
+
 // ############ atan ############
 
 // ref: mathfuncs_core.simd.hpp
@@ -93,14 +105,17 @@ static constexpr AtanParams atan_params_deg {
 
 template <typename VEC_T>
 __attribute__((always_inline)) inline VEC_T
-    rvv_atan(VEC_T vy, VEC_T vx, size_t vl, const AtanParams& params)
+    rvv_atan(VEC_T vy, VEC_T vx, size_t vl, const AtanParams& params,
+             bool low_register_reciprocal = false)
 {
     const auto ax = __riscv_vfabs(vx, vl);
     const auto ay = __riscv_vfabs(vy, vl);
-    // The two Newton refinements in __riscv_vfrec preserve cartToPolar accuracy.
+    // Both reciprocal schedules retain two Newton refinements for cartToPolar accuracy.
     const auto denominator = __riscv_vfadd(__riscv_vfmax(ax, ay, vl), FLT_EPSILON, vl);
+    const auto reciprocal = low_register_reciprocal ? vfrec_lowreg(denominator, vl)
+                                                    : __riscv_vfrec(denominator, vl);
     const auto c = __riscv_vfmul(__riscv_vfmin(ax, ay, vl),
-                                 __riscv_vfrec(denominator, vl), vl);
+                                 reciprocal, vl);
     const auto c2 = __riscv_vfmul(c, c, vl);
 
     // Using vfmadd only results in about a 2% performance improvement, but it occupies 3 additional

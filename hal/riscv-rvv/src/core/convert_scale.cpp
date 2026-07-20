@@ -39,6 +39,39 @@ inline int convertScale_8U8U(const uchar* src, size_t src_step, uchar* dst, size
 
 inline int convertScale_8U32F(const uchar* src, size_t src_step, uchar* dst, size_t dst_step, int width, int height, double alpha, double beta)
 {
+    if (alpha == 1.0 && beta == 0.0)
+    {
+        for (int i = 0; i < height; i++)
+        {
+            const uchar* src_row = src + i * src_step;
+            float* dst_row = reinterpret_cast<float*>(dst + i * dst_step);
+            int vlmax = __riscv_vsetvlmax_e8m2();
+            int j = 0;
+            for (; j <= width - 2 * vlmax; j += 2 * vlmax)
+            {
+                auto vec_src0 = __riscv_vle8_v_u8m2(src_row + j, vlmax);
+                auto vec_src_u16_0 = __riscv_vzext_vf2(vec_src0, vlmax);
+                auto vec_dst0 = __riscv_vfwcvt_f(vec_src_u16_0, vlmax);
+                auto vec_src1 = __riscv_vle8_v_u8m2(src_row + j + vlmax, vlmax);
+                auto vec_src_u16_1 = __riscv_vzext_vf2(vec_src1, vlmax);
+                auto vec_dst1 = __riscv_vfwcvt_f(vec_src_u16_1, vlmax);
+                __riscv_vse32_v_f32m8(dst_row + j, vec_dst0, vlmax);
+                __riscv_vse32_v_f32m8(dst_row + j + vlmax, vec_dst1, vlmax);
+            }
+            int vl;
+            for (; j < width; j += vl)
+            {
+                vl = __riscv_vsetvl_e8m2(width - j);
+                auto vec_src = __riscv_vle8_v_u8m2(src_row + j, vl);
+                auto vec_src_u16 = __riscv_vzext_vf2(vec_src, vl);
+                auto vec_dst = __riscv_vfwcvt_f(vec_src_u16, vl);
+                __riscv_vse32_v_f32m8(dst_row + j, vec_dst, vl);
+            }
+        }
+
+        return CV_HAL_ERROR_OK;
+    }
+
     int vlmax = __riscv_vsetvlmax_e32m8();
     auto vec_b = __riscv_vfmv_v_f_f32m8(beta, vlmax);
     float a = alpha;
@@ -47,8 +80,22 @@ inline int convertScale_8U32F(const uchar* src, size_t src_step, uchar* dst, siz
     {
         const uchar* src_row = src + i * src_step;
         float* dst_row = reinterpret_cast<float*>(dst + i * dst_step);
+        int j = 0;
+        for (; j <= width - 2 * vlmax; j += 2 * vlmax)
+        {
+            auto vec_src0 = __riscv_vle8_v_u8m2(src_row + j, vlmax);
+            auto vec_src_u16_0 = __riscv_vzext_vf2(vec_src0, vlmax);
+            auto vec_src_f32_0 = __riscv_vfwcvt_f(vec_src_u16_0, vlmax);
+            auto vec_src1 = __riscv_vle8_v_u8m2(src_row + j + vlmax, vlmax);
+            auto vec_src_u16_1 = __riscv_vzext_vf2(vec_src1, vlmax);
+            auto vec_src_f32_1 = __riscv_vfwcvt_f(vec_src_u16_1, vlmax);
+            auto vec_fma0 = __riscv_vfmadd(vec_src_f32_0, a, vec_b, vlmax);
+            auto vec_fma1 = __riscv_vfmadd(vec_src_f32_1, a, vec_b, vlmax);
+            __riscv_vse32_v_f32m8(dst_row + j, vec_fma0, vlmax);
+            __riscv_vse32_v_f32m8(dst_row + j + vlmax, vec_fma1, vlmax);
+        }
         int vl;
-        for (int j = 0; j < width; j += vl)
+        for (; j < width; j += vl)
         {
             vl = __riscv_vsetvl_e8m2(width - j);
             auto vec_src = __riscv_vle8_v_u8m2(src_row + j, vl);
@@ -199,6 +246,36 @@ inline int convertScale_16U8U(const uchar* src, size_t src_step, uchar* dst, siz
 
 inline int convertScale_16U32F(const uchar* src, size_t src_step, uchar* dst, size_t dst_step, int width, int height, double alpha, double beta)
 {
+    if (alpha == 1.0 && beta == 0.0)
+    {
+        for (int i = 0; i < height; i++)
+        {
+            const ushort* src_row = reinterpret_cast<const ushort*>(src + i * src_step);
+            float* dst_row = reinterpret_cast<float*>(dst + i * dst_step);
+            int vlmax = __riscv_vsetvlmax_e16m4();
+            int j = 0;
+            for (; j <= width - 2 * vlmax; j += 2 * vlmax)
+            {
+                auto vec_src0 = __riscv_vle16_v_u16m4(src_row + j, vlmax);
+                auto vec_dst0 = __riscv_vfwcvt_f(vec_src0, vlmax);
+                auto vec_src1 = __riscv_vle16_v_u16m4(src_row + j + vlmax, vlmax);
+                auto vec_dst1 = __riscv_vfwcvt_f(vec_src1, vlmax);
+                __riscv_vse32_v_f32m8(dst_row + j, vec_dst0, vlmax);
+                __riscv_vse32_v_f32m8(dst_row + j + vlmax, vec_dst1, vlmax);
+            }
+            int vl;
+            for (; j < width; j += vl)
+            {
+                vl = __riscv_vsetvl_e16m4(width - j);
+                auto vec_src = __riscv_vle16_v_u16m4(src_row + j, vl);
+                auto vec_dst = __riscv_vfwcvt_f(vec_src, vl);
+                __riscv_vse32_v_f32m8(dst_row + j, vec_dst, vl);
+            }
+        }
+
+        return CV_HAL_ERROR_OK;
+    }
+
     int vlmax = __riscv_vsetvlmax_e32m8();
     auto vec_b = __riscv_vfmv_v_f_f32m8(beta, vlmax);
     float a = alpha;
@@ -207,8 +284,20 @@ inline int convertScale_16U32F(const uchar* src, size_t src_step, uchar* dst, si
     {
         const ushort* src_row = reinterpret_cast<const ushort*>(src + i * src_step);
         float* dst_row = reinterpret_cast<float*>(dst + i * dst_step);
+        int j = 0;
+        for (; j <= width - 2 * vlmax; j += 2 * vlmax)
+        {
+            auto vec_src0 = __riscv_vle16_v_u16m4(src_row + j, vlmax);
+            auto vec_src_f32_0 = __riscv_vfwcvt_f(vec_src0, vlmax);
+            auto vec_src1 = __riscv_vle16_v_u16m4(src_row + j + vlmax, vlmax);
+            auto vec_src_f32_1 = __riscv_vfwcvt_f(vec_src1, vlmax);
+            auto vec_fma0 = __riscv_vfmadd(vec_src_f32_0, a, vec_b, vlmax);
+            auto vec_fma1 = __riscv_vfmadd(vec_src_f32_1, a, vec_b, vlmax);
+            __riscv_vse32_v_f32m8(dst_row + j, vec_fma0, vlmax);
+            __riscv_vse32_v_f32m8(dst_row + j + vlmax, vec_fma1, vlmax);
+        }
         int vl;
-        for (int j = 0; j < width; j += vl)
+        for (; j < width; j += vl)
         {
             vl = __riscv_vsetvl_e16m4(width - j);
             auto vec_src = __riscv_vle16_v_u16m4(src_row + j, vl);
@@ -223,6 +312,36 @@ inline int convertScale_16U32F(const uchar* src, size_t src_step, uchar* dst, si
 
 inline int convertScale_16S32F(const uchar* src, size_t src_step, uchar* dst, size_t dst_step, int width, int height, double alpha, double beta)
 {
+    if (alpha == 1.0 && beta == 0.0)
+    {
+        for (int i = 0; i < height; i++)
+        {
+            const short* src_row = reinterpret_cast<const short*>(src + i * src_step);
+            float* dst_row = reinterpret_cast<float*>(dst + i * dst_step);
+            int vlmax = __riscv_vsetvlmax_e16m4();
+            int j = 0;
+            for (; j <= width - 2 * vlmax; j += 2 * vlmax)
+            {
+                auto vec_src0 = __riscv_vle16_v_i16m4(src_row + j, vlmax);
+                auto vec_dst0 = __riscv_vfwcvt_f(vec_src0, vlmax);
+                auto vec_src1 = __riscv_vle16_v_i16m4(src_row + j + vlmax, vlmax);
+                auto vec_dst1 = __riscv_vfwcvt_f(vec_src1, vlmax);
+                __riscv_vse32_v_f32m8(dst_row + j, vec_dst0, vlmax);
+                __riscv_vse32_v_f32m8(dst_row + j + vlmax, vec_dst1, vlmax);
+            }
+            int vl;
+            for (; j < width; j += vl)
+            {
+                vl = __riscv_vsetvl_e16m4(width - j);
+                auto vec_src = __riscv_vle16_v_i16m4(src_row + j, vl);
+                auto vec_dst = __riscv_vfwcvt_f(vec_src, vl);
+                __riscv_vse32_v_f32m8(dst_row + j, vec_dst, vl);
+            }
+        }
+
+        return CV_HAL_ERROR_OK;
+    }
+
     int vlmax = __riscv_vsetvlmax_e32m8();
     auto vec_b = __riscv_vfmv_v_f_f32m8(beta, vlmax);
     float a = alpha;
@@ -231,8 +350,20 @@ inline int convertScale_16S32F(const uchar* src, size_t src_step, uchar* dst, si
     {
         const short* src_row = reinterpret_cast<const short*>(src + i * src_step);
         float* dst_row = reinterpret_cast<float*>(dst + i * dst_step);
+        int j = 0;
+        for (; j <= width - 2 * vlmax; j += 2 * vlmax)
+        {
+            auto vec_src0 = __riscv_vle16_v_i16m4(src_row + j, vlmax);
+            auto vec_src_f32_0 = __riscv_vfwcvt_f(vec_src0, vlmax);
+            auto vec_src1 = __riscv_vle16_v_i16m4(src_row + j + vlmax, vlmax);
+            auto vec_src_f32_1 = __riscv_vfwcvt_f(vec_src1, vlmax);
+            auto vec_fma0 = __riscv_vfmadd(vec_src_f32_0, a, vec_b, vlmax);
+            auto vec_fma1 = __riscv_vfmadd(vec_src_f32_1, a, vec_b, vlmax);
+            __riscv_vse32_v_f32m8(dst_row + j, vec_fma0, vlmax);
+            __riscv_vse32_v_f32m8(dst_row + j + vlmax, vec_fma1, vlmax);
+        }
         int vl;
-        for (int j = 0; j < width; j += vl)
+        for (; j < width; j += vl)
         {
             vl = __riscv_vsetvl_e16m4(width - j);
             auto vec_src = __riscv_vle16_v_i16m4(src_row + j, vl);
@@ -280,8 +411,18 @@ inline int convertScale_32F32F(const uchar* src, size_t src_step, uchar* dst, si
     {
         const float* src_row = reinterpret_cast<const float*>(src + i * src_step);
         float* dst_row = reinterpret_cast<float*>(dst + i * dst_step);
+        int j = 0;
+        for (; j <= width - 2 * vlmax; j += 2 * vlmax)
+        {
+            auto vec_src0 = __riscv_vle32_v_f32m8(src_row + j, vlmax);
+            auto vec_src1 = __riscv_vle32_v_f32m8(src_row + j + vlmax, vlmax);
+            auto vec_fma0 = __riscv_vfmadd(vec_src0, a, vec_b, vlmax);
+            auto vec_fma1 = __riscv_vfmadd(vec_src1, a, vec_b, vlmax);
+            __riscv_vse32_v_f32m8(dst_row + j, vec_fma0, vlmax);
+            __riscv_vse32_v_f32m8(dst_row + j + vlmax, vec_fma1, vlmax);
+        }
         int vl;
-        for (int j = 0; j < width; j += vl)
+        for (; j < width; j += vl)
         {
             vl = __riscv_vsetvl_e32m8(width - j);
             auto vec_src = __riscv_vle32_v_f32m8(src_row + j, vl);

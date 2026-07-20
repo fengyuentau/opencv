@@ -165,6 +165,36 @@ inline VEC_T sqrt(VEC_T x, size_t vl)
     return __riscv_vfmul_mu(mask, x, x, y, vl);
 }
 
+template <size_t iter_times, typename VEC_T>
+inline void sqrt2x(VEC_T x0, VEC_T x1, VEC_T& dst0, VEC_T& dst1, size_t vl)
+{
+    auto x20 = __riscv_vfmul(x0, 0.5, vl);
+    auto x21 = __riscv_vfmul(x1, 0.5, vl);
+    auto y0 = __riscv_vfrsqrt7(x0, vl);
+    auto y1 = __riscv_vfrsqrt7(x1, vl);
+#ifdef __clang__
+#pragma unroll
+#endif
+    for (size_t i = 0; i < iter_times; i++)
+    {
+        auto t0 = __riscv_vfmul(y0, y0, vl);
+        auto t1 = __riscv_vfmul(y1, y1, vl);
+        t0 = __riscv_vfmul(t0, x20, vl);
+        t1 = __riscv_vfmul(t1, x21, vl);
+        t0 = __riscv_vfrsub(t0, 1.5, vl);
+        t1 = __riscv_vfrsub(t1, 1.5, vl);
+        y0 = __riscv_vfmul(t0, y0, vl);
+        y1 = __riscv_vfmul(t1, y1, vl);
+    }
+    asm volatile("" ::: "memory");
+    auto classified0 = __riscv_vfclass(x0, vl);
+    auto classified1 = __riscv_vfclass(x1, vl);
+    auto mask0 = __riscv_vmseq(__riscv_vand(classified0, 0b10111000, vl), 0, vl);
+    auto mask1 = __riscv_vmseq(__riscv_vand(classified1, 0b10111000, vl), 0, vl);
+    dst0 = __riscv_vfmul_mu(mask0, x0, x0, y0, vl);
+    dst1 = __riscv_vfmul_mu(mask1, x1, x1, y1, vl);
+}
+
 // Newton-Raphson method
 // Use 3 LMUL registers and 1 mask register
 template <size_t iter_times, typename VEC_T>

@@ -2265,6 +2265,54 @@ TEST(MinMaxLoc, Mat_IntMax_Without_Mask)
     ASSERT_EQ(Point(0, 0), maxLoc);
 }
 
+TEST(MinMaxLoc, Zero_Mask)
+{
+    const int types[] = {CV_8U, CV_8S, CV_16U, CV_16S, CV_32S, CV_32F, CV_64F};
+    for (int type : types)
+    {
+        SCOPED_TRACE(type);
+        Mat src(3, 7, type, Scalar::all(42));
+        Mat maskStorage(3, 11, CV_8U, Scalar::all(0));
+        Mat mask = maskStorage.colRange(2, 9);
+        double minVal = -1, maxVal = -1;
+        Point minLoc, maxLoc;
+
+        minMaxLoc(src, &minVal, &maxVal, &minLoc, &maxLoc, mask);
+
+        EXPECT_EQ(0, minVal);
+        EXPECT_EQ(0, maxVal);
+        EXPECT_EQ(Point(-1, -1), minLoc);
+        EXPECT_EQ(Point(-1, -1), maxLoc);
+    }
+}
+
+TEST(MinMaxLoc, Values_Without_Locations)
+{
+    const int types[] = {CV_8U, CV_8S, CV_16U, CV_16S, CV_32S, CV_32F, CV_64F};
+    const Mat values = (Mat_<double>(2, 4) << 5, 2, 9, 4, 8, 3, 7, 6);
+    Mat maskStorage(2, 8, CV_8U, Scalar::all(0));
+    Mat mask = maskStorage.colRange(2, 6);
+    mask.at<uchar>(0, 0) = 255;
+    mask.at<uchar>(1, 0) = 255;
+    mask.at<uchar>(1, 1) = 255;
+
+    for (int type : types)
+    {
+        SCOPED_TRACE(type);
+        Mat src;
+        values.convertTo(src, type);
+        double minVal = 0, maxVal = 0;
+
+        minMaxLoc(src, &minVal, &maxVal, NULL, NULL);
+        EXPECT_EQ(2, minVal);
+        EXPECT_EQ(9, maxVal);
+
+        minMaxLoc(src, &minVal, &maxVal, NULL, NULL, mask);
+        EXPECT_EQ(3, minVal);
+        EXPECT_EQ(8, maxVal);
+    }
+}
+
 TEST(Normalize, regression_5876_inplace_change_type)
 {
     double initial_values[] = {1, 2, 5, 4, 3};

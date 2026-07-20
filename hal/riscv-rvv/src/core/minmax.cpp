@@ -10,6 +10,18 @@ namespace cv { namespace rvv_hal { namespace core {
 
 #if CV_HAL_RVV_1P0_ENABLED
 
+inline void setZeroMaskResult(double* minVal, double* maxVal, int* minIdx, int* maxIdx)
+{
+    if (minVal)
+        *minVal = 0;
+    if (maxVal)
+        *maxVal = 0;
+    if (minIdx)
+        minIdx[0] = minIdx[1] = -1;
+    if (maxIdx)
+        maxIdx[0] = maxIdx[1] = -1;
+}
+
 template<typename VEC_T, typename BOOL_T, typename T = typename VEC_T::ElemType>
 inline int minMaxIdxReadTwice(const uchar* src_data, size_t src_step, int width, int height, double* minVal, double* maxVal,
                               int* minIdx, int* maxIdx, uchar* mask, size_t mask_step)
@@ -21,6 +33,7 @@ inline int minMaxIdxReadTwice(const uchar* src_data, size_t src_step, int width,
 
     if (mask)
     {
+        bool hasValue = false;
         for (int i = 0; i < height; i++)
         {
             const T* src_row = reinterpret_cast<const T*>(src_data + i * src_step);
@@ -32,17 +45,24 @@ inline int minMaxIdxReadTwice(const uchar* src_data, size_t src_step, int width,
                 auto vec_src = VEC_T::vload(src_row + j, vl);
                 auto vec_mask = BOOL_T::vload(mask_row + j, vl);
                 auto bool_mask = __riscv_vmsne(vec_mask, 0, vl);
+                if (!hasValue && __riscv_vfirst(bool_mask, vl) >= 0)
+                    hasValue = true;
                 vec_min = VEC_T::vmin_tumu(bool_mask, vec_min, vec_min, vec_src, vl);
                 vec_max = VEC_T::vmax_tumu(bool_mask, vec_max, vec_max, vec_src, vl);
             }
         }
+        if (!hasValue)
+        {
+            setZeroMaskResult(minVal, maxVal, minIdx, maxIdx);
+            return CV_HAL_ERROR_OK;
+        }
 
-        auto sc_minval = VEC_T::vmv(std::numeric_limits<T>::max(), vlmax);
-        auto sc_maxval = VEC_T::vmv(std::numeric_limits<T>::lowest(), vlmax);
+        auto sc_minval = RVV_BaseType<VEC_T>::vmv_s(std::numeric_limits<T>::max(), vlmax);
+        auto sc_maxval = RVV_BaseType<VEC_T>::vmv_s(std::numeric_limits<T>::lowest(), vlmax);
         sc_minval = VEC_T::vredmin(vec_min, sc_minval, vlmax);
         sc_maxval = VEC_T::vredmax(vec_max, sc_maxval, vlmax);
-        val_min = __riscv_vmv_x(sc_minval);
-        val_max = __riscv_vmv_x(sc_maxval);
+        val_min = RVV_BaseType<VEC_T>::vmv_x(sc_minval);
+        val_max = RVV_BaseType<VEC_T>::vmv_x(sc_maxval);
 
         bool found_min = !minIdx, found_max = !maxIdx;
         for (int i = 0; i < height && (!found_min || !found_max); i++)
@@ -56,10 +76,10 @@ inline int minMaxIdxReadTwice(const uchar* src_data, size_t src_step, int width,
                 auto vec_src = VEC_T::vload(src_row + j, vl);
                 auto vec_mask = BOOL_T::vload(mask_row + j, vl);
                 auto bool_mask = __riscv_vmsne(vec_mask, 0, vl);
-                auto bool_zero = __riscv_vmxor(bool_mask, bool_mask, vl);
                 if (!found_min)
                 {
-                    auto bool_minpos = __riscv_vmseq_mu(bool_mask, bool_zero, vec_src, val_min, vl);
+                    auto bool_minpos = VEC_T::vmeq(vec_src, val_min, vl);
+                    bool_minpos = __riscv_vmand(bool_minpos, bool_mask, vl);
                     int index = __riscv_vfirst(bool_minpos, vl);
                     if (index != -1)
                     {
@@ -70,7 +90,8 @@ inline int minMaxIdxReadTwice(const uchar* src_data, size_t src_step, int width,
                 }
                 if (!found_max)
                 {
-                    auto bool_maxpos = __riscv_vmseq_mu(bool_mask, bool_zero, vec_src, val_max, vl);
+                    auto bool_maxpos = VEC_T::vmeq(vec_src, val_max, vl);
+                    bool_maxpos = __riscv_vmand(bool_maxpos, bool_mask, vl);
                     int index = __riscv_vfirst(bool_maxpos, vl);
                     if (index != -1)
                     {
@@ -97,12 +118,12 @@ inline int minMaxIdxReadTwice(const uchar* src_data, size_t src_step, int width,
             }
         }
 
-        auto sc_minval = VEC_T::vmv(std::numeric_limits<T>::max(), vlmax);
-        auto sc_maxval = VEC_T::vmv(std::numeric_limits<T>::lowest(), vlmax);
+        auto sc_minval = RVV_BaseType<VEC_T>::vmv_s(std::numeric_limits<T>::max(), vlmax);
+        auto sc_maxval = RVV_BaseType<VEC_T>::vmv_s(std::numeric_limits<T>::lowest(), vlmax);
         sc_minval = VEC_T::vredmin(vec_min, sc_minval, vlmax);
         sc_maxval = VEC_T::vredmax(vec_max, sc_maxval, vlmax);
-        val_min = __riscv_vmv_x(sc_minval);
-        val_max = __riscv_vmv_x(sc_maxval);
+        val_min = RVV_BaseType<VEC_T>::vmv_x(sc_minval);
+        val_max = RVV_BaseType<VEC_T>::vmv_x(sc_maxval);
 
         bool found_min = !minIdx, found_max = !maxIdx;
         for (int i = 0; i < height && (!found_min || !found_max); i++)
@@ -115,7 +136,7 @@ inline int minMaxIdxReadTwice(const uchar* src_data, size_t src_step, int width,
                 auto vec_src = VEC_T::vload(src_row + j, vl);
                 if (!found_min)
                 {
-                    auto bool_minpos = __riscv_vmseq(vec_src, val_min, vl);
+                    auto bool_minpos = VEC_T::vmeq(vec_src, val_min, vl);
                     int index = __riscv_vfirst(bool_minpos, vl);
                     if (index != -1)
                     {
@@ -126,7 +147,7 @@ inline int minMaxIdxReadTwice(const uchar* src_data, size_t src_step, int width,
                 }
                 if (!found_max)
                 {
-                    auto bool_maxpos = __riscv_vmseq(vec_src, val_max, vl);
+                    auto bool_maxpos = VEC_T::vmeq(vec_src, val_max, vl);
                     int index = __riscv_vfirst(bool_maxpos, vl);
                     if (index != -1)
                     {
@@ -163,6 +184,7 @@ inline int minMaxIdxReadOnce(const uchar* src_data, size_t src_step, int width, 
 
     if (mask)
     {
+        bool hasValue = false;
         for (int i = 0; i < height; i++)
         {
             const T* src_row = reinterpret_cast<const T*>(src_data + i * src_step);
@@ -175,6 +197,8 @@ inline int minMaxIdxReadOnce(const uchar* src_data, size_t src_step, int width, 
                 auto vec_mask = BOOL_T::vload(mask_row + j, vl);
                 auto bool_mask = __riscv_vmsne(vec_mask, 0, vl);
                 auto bool_zero = __riscv_vmxor(bool_mask, bool_mask, vl);
+                if (!hasValue && __riscv_vfirst(bool_mask, vl) >= 0)
+                    hasValue = true;
 
                 auto bool_minpos = VEC_T::vmlt_mu(bool_mask, bool_zero, vec_src, vec_min, vl);
                 auto bool_maxpos = VEC_T::vmgt_mu(bool_mask, bool_zero, vec_src, vec_max, vl);
@@ -185,6 +209,11 @@ inline int minMaxIdxReadOnce(const uchar* src_data, size_t src_step, int width, 
                 vec_max = __riscv_vmerge_tu(vec_max, vec_max, vec_src, bool_maxpos, vl);
                 vec_pos = __riscv_vadd(vec_pos, vl, vlmax);
             }
+        }
+        if (!hasValue)
+        {
+            setZeroMaskResult(minVal, maxVal, minIdx, maxIdx);
+            return CV_HAL_ERROR_OK;
         }
     }
     else
@@ -258,18 +287,24 @@ int minMaxIdx(const uchar* src_data, size_t src_step, int width, int height, int
     switch (depth)
     {
     case CV_8UC1:
-        return minMaxIdxReadTwice<RVV_U8M1, RVV_U8M1>(src_data, src_step, width, height, minVal, maxVal, minIdx, maxIdx, mask, mask_step);
+        return minMaxIdxReadTwice<RVV_U8M8, RVV_U8M8>(src_data, src_step, width, height, minVal, maxVal, minIdx, maxIdx, mask, mask_step);
     case CV_8SC1:
-        return minMaxIdxReadTwice<RVV_I8M1, RVV_U8M1>(src_data, src_step, width, height, minVal, maxVal, minIdx, maxIdx, mask, mask_step);
+        return minMaxIdxReadTwice<RVV_I8M8, RVV_U8M8>(src_data, src_step, width, height, minVal, maxVal, minIdx, maxIdx, mask, mask_step);
     case CV_16UC1:
-        return minMaxIdxReadTwice<RVV_U16M1, RVV_U8MF2>(src_data, src_step, width, height, minVal, maxVal, minIdx, maxIdx, mask, mask_step);
+        return minMaxIdxReadTwice<RVV_U16M8, RVV_U8M4>(src_data, src_step, width, height, minVal, maxVal, minIdx, maxIdx, mask, mask_step);
     case CV_16SC1:
-        return minMaxIdxReadTwice<RVV_I16M1, RVV_U8MF2>(src_data, src_step, width, height, minVal, maxVal, minIdx, maxIdx, mask, mask_step);
+        return minMaxIdxReadTwice<RVV_I16M8, RVV_U8M4>(src_data, src_step, width, height, minVal, maxVal, minIdx, maxIdx, mask, mask_step);
     case CV_32SC1:
+        if (!minIdx && !maxIdx)
+            return minMaxIdxReadTwice<RVV_I32M8, RVV_U8M2>(src_data, src_step, width, height, minVal, maxVal, minIdx, maxIdx, mask, mask_step);
         return minMaxIdxReadOnce<RVV_I32M4, RVV_U8M1, RVV_U32M4>(src_data, src_step, width, height, minVal, maxVal, minIdx, maxIdx, mask, mask_step);
     case CV_32FC1:
+        if (!minIdx && !maxIdx)
+            return minMaxIdxReadTwice<RVV_F32M8, RVV_U8M2>(src_data, src_step, width, height, minVal, maxVal, minIdx, maxIdx, mask, mask_step);
         return minMaxIdxReadOnce<RVV_F32M4, RVV_U8M1, RVV_U32M4>(src_data, src_step, width, height, minVal, maxVal, minIdx, maxIdx, mask, mask_step);
     case CV_64FC1:
+        if (!minIdx && !maxIdx)
+            return minMaxIdxReadTwice<RVV_F64M8, RVV_U8M1>(src_data, src_step, width, height, minVal, maxVal, minIdx, maxIdx, mask, mask_step);
         return minMaxIdxReadOnce<RVV_F64M4, RVV_U8MF2, RVV_U32M2>(src_data, src_step, width, height, minVal, maxVal, minIdx, maxIdx, mask, mask_step);
     }
 

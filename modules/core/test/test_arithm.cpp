@@ -1667,6 +1667,23 @@ INSTANTIATE_TEST_CASE_P(Core_Flip, ElemWiseTest, ::testing::Values(ElemWiseOpPtr
 INSTANTIATE_TEST_CASE_P(Core_FlipInplace, ElemWiseTest, ::testing::Values(ElemWiseOpPtr(new FlipInplaceOp)));
 INSTANTIATE_TEST_CASE_P(Core_Rotate, ElemWiseTest, ::testing::Values(ElemWiseOpPtr(new RotateOp)));
 INSTANTIATE_TEST_CASE_P(Core_Transpose, ElemWiseTest, ::testing::Values(ElemWiseOpPtr(new TransposeOp)));
+
+TEST(Core_Transpose, threeChannel16sRoi)
+{
+    Mat srcStorage(481, 643, CV_16SC3);
+    randu(srcStorage, -32768, 32767);
+    Mat src = srcStorage(Rect(1, 1, 641, 479));
+
+    Mat dstStorage(643, 481, CV_16SC3);
+    Mat dst = dstStorage(Rect(1, 1, 479, 641));
+    Mat expected;
+    cvtest::transpose(src, expected);
+
+    cv::transpose(src, dst);
+
+    EXPECT_EQ(0, cv::norm(dst, expected, NORM_INF));
+}
+
 INSTANTIATE_TEST_CASE_P(Core_SetIdentity, ElemWiseTest, ::testing::Values(ElemWiseOpPtr(new SetIdentityOp)));
 
 INSTANTIATE_TEST_CASE_P(Core_Exp, ElemWiseTest, ::testing::Values(ElemWiseOpPtr(new ExpOp)));

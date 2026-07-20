@@ -109,6 +109,25 @@ static void transpose2d_16u(const uchar *src_data, size_t src_step, uchar *dst_d
     }
 }
 
+static void transpose2d_16uC3(const uchar *src_data, size_t src_step, uchar *dst_data, size_t dst_step, int src_width, int src_height) {
+    const size_t src_step_base = src_step / sizeof(ushort);
+    const size_t dst_step_base = dst_step / sizeof(ushort);
+    const ushort *src_base = reinterpret_cast<const ushort*>(src_data);
+    ushort *dst_base = reinterpret_cast<ushort*>(dst_data);
+
+    for (int h = 0; h < src_height; ++h) {
+        const ushort *src = src_base + static_cast<size_t>(h) * src_step_base;
+        ushort *dst = dst_base + 3 * h;
+        int vl;
+        for (int w = 0; w < src_width; w += vl) {
+            vl = __riscv_vsetvl_e16m2(src_width - w);
+            vuint16m2x3_t v = __riscv_vlseg3e16_v_u16m2x3(src + 3 * w, vl);
+            __riscv_vssseg3e16_v_u16m2x3(dst + static_cast<size_t>(w) * dst_step_base,
+                                         static_cast<ptrdiff_t>(dst_step), v, vl);
+        }
+    }
+}
+
 static void transpose2d_32s(const uchar *src_data, size_t src_step, uchar *dst_data, size_t dst_step, int src_width, int src_height) {
     auto transpose_32s_4xVl = [](const int *src, size_t sstep, int *dst, size_t dstep, const int vl) {
         auto v0 = __riscv_vle32_v_i32m1(src, vl);
@@ -190,9 +209,18 @@ int transpose2d(const uchar* src_data, size_t src_step, uchar* dst_data, size_t 
         return CV_HAL_ERROR_NOT_IMPLEMENTED;
     }
 
+    if (element_size == 6) {
+        const size_t pixels = static_cast<size_t>(src_width) * src_height;
+        // Keep the strided C3 path within its measured cache-friendly landscape range.
+        if (static_cast<int64_t>(src_width) * 3 < static_cast<int64_t>(src_height) * 4 ||
+            pixels < static_cast<size_t>(256) * 192 || pixels * element_size > 4 * 1024 * 1024) {
+            return CV_HAL_ERROR_NOT_IMPLEMENTED;
+        }
+    }
+
     static Transpose2dFunc tab[] = {
         0, transpose2d_8u, transpose2d_16u, 0,
-        transpose2d_32s, 0, 0, 0,
+        transpose2d_32s, 0, transpose2d_16uC3, 0,
         transpose2d_32sC2, 0, 0, 0,
         0, 0, 0, 0,
         0, 0, 0, 0,

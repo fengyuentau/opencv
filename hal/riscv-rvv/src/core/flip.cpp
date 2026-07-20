@@ -78,8 +78,68 @@ inline void flip_inplace_##name(uchar* data, size_t step, int width, int height,
 }
 CV_HAL_RVV_FLIP_INPLACE_C1(8UC1, uchar, RVV_U8M8)
 CV_HAL_RVV_FLIP_INPLACE_C1(16UC1, ushort, RVV_U16M8)
-CV_HAL_RVV_FLIP_INPLACE_C1(32UC1, unsigned, RVV_U32M8)
-CV_HAL_RVV_FLIP_INPLACE_C1(64UC1, uint64_t, RVV_U64M8)
+
+inline void flip_inplace_32UC1(uchar* data, size_t step, int width, int height, int flip_mode) {
+    auto new_height = (flip_mode < 0 ? height / 2 : height);
+    auto new_width = (flip_mode < 0 ? width : width / 2);
+    int h;
+    for (h = 0; h < new_height; h++) {
+        uint32_t* row_begin = (uint32_t*)(data + step * h);
+        uint32_t* row_end = (uint32_t*)(data + step * (flip_mode < 0 ? (height - h) : (h + 1)));
+        int vl;
+        for (int w = 0; w < new_width; w += vl) {
+            vl = __riscv_vsetvl_e32m8(new_width - w);
+            auto v_left = __riscv_vle32_v_u32m8(row_begin + w, vl);
+            auto v_right = __riscv_vlse32_v_u32m8(row_end - w - 1, -static_cast<ptrdiff_t>(sizeof(uint32_t)), vl);
+            __riscv_vse32_v_u32m8(row_begin + w, v_right, vl);
+            __riscv_vsse32_v_u32m8(row_end - w - 1, -static_cast<ptrdiff_t>(sizeof(uint32_t)), v_left, vl);
+        }
+    }
+    if (flip_mode == -1 && new_height * 2 != height) {
+        uint32_t* row_begin = (uint32_t*)(data + step * h);
+        uint32_t* row_end = (uint32_t*)(data + step * (h + 1));
+        new_width /= 2;
+        int vl;
+        for (int w = 0; w < new_width; w += vl) {
+            vl = __riscv_vsetvl_e32m8(new_width - w);
+            auto v_left = __riscv_vle32_v_u32m8(row_begin + w, vl);
+            auto v_right = __riscv_vlse32_v_u32m8(row_end - w - 1, -static_cast<ptrdiff_t>(sizeof(uint32_t)), vl);
+            __riscv_vse32_v_u32m8(row_begin + w, v_right, vl);
+            __riscv_vsse32_v_u32m8(row_end - w - 1, -static_cast<ptrdiff_t>(sizeof(uint32_t)), v_left, vl);
+        }
+    }
+}
+
+inline void flip_inplace_64UC1(uchar* data, size_t step, int width, int height, int flip_mode) {
+    auto new_height = (flip_mode < 0 ? height / 2 : height);
+    auto new_width = (flip_mode < 0 ? width : width / 2);
+    int h;
+    for (h = 0; h < new_height; h++) {
+        uint64_t* row_begin = (uint64_t*)(data + step * h);
+        uint64_t* row_end = (uint64_t*)(data + step * (flip_mode < 0 ? (height - h) : (h + 1)));
+        int vl;
+        for (int w = 0; w < new_width; w += vl) {
+            vl = __riscv_vsetvl_e64m8(new_width - w);
+            auto v_left = __riscv_vle64_v_u64m8(row_begin + w, vl);
+            auto v_right = __riscv_vlse64_v_u64m8(row_end - w - 1, -static_cast<ptrdiff_t>(sizeof(uint64_t)), vl);
+            __riscv_vse64_v_u64m8(row_begin + w, v_right, vl);
+            __riscv_vsse64_v_u64m8(row_end - w - 1, -static_cast<ptrdiff_t>(sizeof(uint64_t)), v_left, vl);
+        }
+    }
+    if (flip_mode == -1 && new_height * 2 != height) {
+        uint64_t* row_begin = (uint64_t*)(data + step * h);
+        uint64_t* row_end = (uint64_t*)(data + step * (h + 1));
+        new_width /= 2;
+        int vl;
+        for (int w = 0; w < new_width; w += vl) {
+            vl = __riscv_vsetvl_e64m8(new_width - w);
+            auto v_left = __riscv_vle64_v_u64m8(row_begin + w, vl);
+            auto v_right = __riscv_vlse64_v_u64m8(row_end - w - 1, -static_cast<ptrdiff_t>(sizeof(uint64_t)), vl);
+            __riscv_vse64_v_u64m8(row_begin + w, v_right, vl);
+            __riscv_vsse64_v_u64m8(row_end - w - 1, -static_cast<ptrdiff_t>(sizeof(uint64_t)), v_left, vl);
+        }
+    }
+}
 
 // Suppress warnings of "ignoring attributes applied to VecType after definition",
 // VecType is vuint8m2x3_t, vuint16m2x3_t, vuint32m2x3_t or vuint64m2x3_t
@@ -317,6 +377,9 @@ inline void flipXY(int esz,
 } // namespace anonymous
 
 inline int flip_inplace(int esz, uchar* data, size_t step, int width, int height, int flip_mode) {
+    if (flip_mode > 0 && esz == 4 && width * height <= 320 * 240)
+        return CV_HAL_ERROR_NOT_IMPLEMENTED;
+
     if (flip_mode == 0) {
         for (int h = 0; h < (height / 2); h++) {
             uchar* top_row = data + step * h;

@@ -78,8 +78,40 @@ inline void flip_inplace_##name(uchar* data, size_t step, int width, int height,
 }
 CV_HAL_RVV_FLIP_INPLACE_C1(8UC1, uchar, RVV_U8M8)
 CV_HAL_RVV_FLIP_INPLACE_C1(16UC1, ushort, RVV_U16M8)
-CV_HAL_RVV_FLIP_INPLACE_C1(32UC1, unsigned, RVV_U32M8)
-CV_HAL_RVV_FLIP_INPLACE_C1(64UC1, uint64_t, RVV_U64M8)
+
+#define CV_HAL_RVV_FLIP_INPLACE_STRIDED_C1(name, _Tps, width) \
+inline void flip_inplace_##name(uchar* data, size_t step, int width_, int height, int flip_mode) { \
+    auto new_height = (flip_mode < 0 ? height / 2 : height); \
+    auto new_width = (flip_mode < 0 ? width_ : width_ / 2); \
+    int h; \
+    for (h = 0; h < new_height; h++) { \
+        _Tps* row_begin = (_Tps*)(data + step * h); \
+        _Tps* row_end = (_Tps*)(data + step * (flip_mode < 0 ? (height - h) : (h + 1))); \
+        int vl; \
+        for (int w = 0; w < new_width; w += vl) { \
+            vl = __riscv_vsetvl_e##width##m8(new_width - w); \
+            auto v_left = __riscv_vle##width##_v_u##width##m8(row_begin + w, vl); \
+            auto v_right = __riscv_vlse##width##_v_u##width##m8(row_end - w - 1, -static_cast<ptrdiff_t>(sizeof(_Tps)), vl); \
+            __riscv_vse##width##_v_u##width##m8(row_begin + w, v_right, vl); \
+            __riscv_vsse##width##_v_u##width##m8(row_end - w - 1, -static_cast<ptrdiff_t>(sizeof(_Tps)), v_left, vl); \
+        } \
+    } \
+    if (flip_mode == -1 && new_height * 2 != height) { \
+        _Tps* row_begin = (_Tps*)(data + step * h); \
+        _Tps* row_end = (_Tps*)(data + step * (h + 1)); \
+        new_width /= 2; \
+        int vl; \
+        for (int w = 0; w < new_width; w += vl) { \
+            vl = __riscv_vsetvl_e##width##m8(new_width - w); \
+            auto v_left = __riscv_vle##width##_v_u##width##m8(row_begin + w, vl); \
+            auto v_right = __riscv_vlse##width##_v_u##width##m8(row_end - w - 1, -static_cast<ptrdiff_t>(sizeof(_Tps)), vl); \
+            __riscv_vse##width##_v_u##width##m8(row_begin + w, v_right, vl); \
+            __riscv_vsse##width##_v_u##width##m8(row_end - w - 1, -static_cast<ptrdiff_t>(sizeof(_Tps)), v_left, vl); \
+        } \
+    } \
+}
+CV_HAL_RVV_FLIP_INPLACE_STRIDED_C1(32UC1, uint32_t, 32)
+CV_HAL_RVV_FLIP_INPLACE_STRIDED_C1(64UC1, uint64_t, 64)
 
 // Suppress warnings of "ignoring attributes applied to VecType after definition",
 // VecType is vuint8m2x3_t, vuint16m2x3_t, vuint32m2x3_t or vuint64m2x3_t

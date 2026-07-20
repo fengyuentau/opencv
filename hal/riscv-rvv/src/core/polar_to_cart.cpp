@@ -29,9 +29,9 @@ static constexpr double sincos_cos_p4 = 0.253669507901048;
 static constexpr double sincos_cos_p2 = -1.233700550136170;
 static constexpr double sincos_cos_p0 = 1.000000000000000;
 
-// Taylor expansion and angle sum identity
-// Use 7 LMUL registers (can be reduced to 5 by splitting fmadd to fadd and fmul)
-template <typename RVV_T, typename T = typename RVV_T::VecType>
+// Taylor expansion and angle sum identity.
+// Fused cosine uses 7 LMUL registers; the split form reduces register pressure.
+template <bool lowRegisterCosine, typename RVV_T, typename T = typename RVV_T::VecType>
 static inline void
     SinCos32f(T angle, T& sinval, T& cosval, float scale, T cos_p2, T cos_p0, size_t vl)
 {
@@ -47,28 +47,37 @@ static inline void
 
     auto cos = __riscv_vfadd(__riscv_vfmul(delta_angle2, sincos_cos_p8, vl), sincos_cos_p6, vl);
     cos = __riscv_vfadd(__riscv_vfmul(delta_angle2, cos, vl), sincos_cos_p4, vl);
-    cos = __riscv_vfmadd(cos, delta_angle2, cos_p2, vl);
-    cos = __riscv_vfmadd(cos, delta_angle2, cos_p0, vl);
+    if (lowRegisterCosine)
+    {
+        cos = __riscv_vfadd(__riscv_vfmul(cos, delta_angle2, vl), sincos_cos_p2, vl);
+        cos = __riscv_vfadd(__riscv_vfmul(cos, delta_angle2, vl), sincos_cos_p0, vl);
+    }
+    else
+    {
+        cos = __riscv_vfmadd(cos, delta_angle2, cos_p2, vl);
+        cos = __riscv_vfmadd(cos, delta_angle2, cos_p0, vl);
+    }
 
     // idx = 0: sinval =  sin, cosval =  cos
     // idx = 1: sinval =  cos, cosval = -sin
     // idx = 2: sinval = -sin, cosval = -cos
     // idx = 3: sinval = -cos, cosval =  sin
     auto idx = __riscv_vand(round_angle, sincos_mask, vl);
-    auto idx1 = __riscv_vmseq(idx, 1, vl);
-    auto idx2 = __riscv_vmseq(idx, 2, vl);
-    auto idx3 = __riscv_vmseq(idx, 3, vl);
+    auto swap = __riscv_vmsne(__riscv_vand(idx, 1, vl), 0, vl);
+    auto neg_sin = __riscv_vmsgt(idx, 1, vl);
+    auto neg_cos = __riscv_vmxor(swap, neg_sin, vl);
 
-    auto idx13 = __riscv_vmor(idx1, idx3, vl);
-    sinval = __riscv_vmerge(sin, cos, idx13, vl);
-    cosval = __riscv_vmerge(cos, sin, idx13, vl);
+    sinval = __riscv_vmerge(sin, cos, swap, vl);
+    cosval = __riscv_vmerge(cos, sin, swap, vl);
 
-    sinval = __riscv_vfneg_mu(__riscv_vmor(idx2, idx3, vl), sinval, sinval, vl);
-    cosval = __riscv_vfneg_mu(__riscv_vmor(idx1, idx2, vl), cosval, cosval, vl);
+    sinval = __riscv_vfneg_mu(neg_sin, sinval, sinval, vl);
+    cosval = __riscv_vfneg_mu(neg_cos, cosval, cosval, vl);
 }
 
-template <typename RVV_T, typename Elem = typename RVV_T::ElemType>
-inline int polarToCart(const Elem* mag, const Elem* angle, Elem* x, Elem* y, int len, bool angleInDegrees)
+template <bool withMagnitude, bool lowRegisterCosine, typename RVV_T,
+          typename Elem = typename RVV_T::ElemType>
+inline int polarToCartImpl(const Elem* mag, const Elem* angle, Elem* x, Elem* y, int len,
+                           bool angleInDegrees)
 {
     using T = RVV_F32M4;
     const auto sincos_scale = angleInDegrees ? sincos_deg_scale : sincos_rad_scale;
@@ -81,8 +90,9 @@ inline int polarToCart(const Elem* mag, const Elem* angle, Elem* x, Elem* y, int
         vl = RVV_T::setvl(len);
         auto vangle = T::cast(RVV_T::vload(angle, vl), vl);
         T::VecType vsin, vcos;
-        SinCos32f<T>(vangle, vsin, vcos, sincos_scale, cos_p2, cos_p0, vl);
-        if (mag)
+        SinCos32f<lowRegisterCosine, T>(vangle, vsin, vcos, sincos_scale,
+                                       cos_p2, cos_p0, vl);
+        if (withMagnitude)
         {
             auto vmag = T::cast(RVV_T::vload(mag, vl), vl);
             vsin = __riscv_vfmul(vsin, vmag, vl);
@@ -96,13 +106,23 @@ inline int polarToCart(const Elem* mag, const Elem* angle, Elem* x, Elem* y, int
     return CV_HAL_ERROR_OK;
 }
 
+template <bool lowRegisterCosine, typename RVV_T, typename Elem = typename RVV_T::ElemType>
+inline int polarToCart(const Elem* mag, const Elem* angle, Elem* x, Elem* y, int len,
+                       bool angleInDegrees)
+{
+    return mag ? polarToCartImpl<true, lowRegisterCosine, RVV_T>(
+                     mag, angle, x, y, len, angleInDegrees)
+               : polarToCartImpl<false, lowRegisterCosine, RVV_T>(
+                     mag, angle, x, y, len, angleInDegrees);
+}
+
 } // anonymous
 
 int polarToCart32f(const float* mag, const float* angle, float* x, float* y, int len, bool angleInDegrees) {
-    return polarToCart<RVV_F32M4>(mag, angle, x, y, len, angleInDegrees);
+    return polarToCart<false, RVV_F32M4>(mag, angle, x, y, len, angleInDegrees);
 }
 int polarToCart64f(const double* mag, const double* angle, double* x, double* y, int len, bool angleInDegrees) {
-    return polarToCart<RVV_F64M8>(mag, angle, x, y, len, angleInDegrees);
+    return polarToCart<true, RVV_F64M8>(mag, angle, x, y, len, angleInDegrees);
 }
 
 #endif // CV_HAL_RVV_1P0_ENABLED

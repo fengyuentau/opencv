@@ -37,6 +37,18 @@ inline  vint16m2_t ext(const   vint8m1_t &v, const int vl) { return __riscv_vsex
 inline  vuint8m1_t nclip(const vuint16m2_t &v, const int vl) { return __riscv_vnclipu(v, 0, __RISCV_VXRM_RNU, vl); }
 inline   vint8m1_t nclip(const  vint16m2_t &v, const int vl) { return __riscv_vnclip(v, 0, __RISCV_VXRM_RNU, vl); }
 
+inline vfloat32m4_t vfrec_finite(const vfloat32m4_t &x, const int vl) {
+    auto rec = __riscv_vfrec7(x, vl);
+    auto two = __riscv_vfmv_v_f_f32m4(2.f, vl);
+    rec = __riscv_vfmul(rec, __riscv_vfnmsac(two, x, rec, vl), vl);
+    rec = __riscv_vfmul(rec, __riscv_vfnmsac(two, x, rec, vl), vl);
+    return rec;
+}
+
+inline vfloat32m4_t scale_recip(const vfloat32m4_t &rec, const float scale, const int vl) {
+    return scale == 1.f ? rec : __riscv_vfmul(rec, scale, vl);
+}
+
 template <typename VT> inline
 VT div_sat(const VT &v1, const VT &v2, const float scale, const int vl) {
     return nclip(div_sat(ext(v1, vl), ext(v2, vl), scale, vl), vl);
@@ -45,28 +57,28 @@ template <> inline
 vint16m2_t div_sat(const vint16m2_t &v1, const vint16m2_t &v2, const float scale, const int vl) {
     auto f1 = __riscv_vfwcvt_f(v1, vl);
     auto f2 = __riscv_vfwcvt_f(v2, vl);
-    auto res = __riscv_vfmul(f1, __riscv_vfmul(common::__riscv_vfrec(f2, vl), scale, vl), vl);
+    auto res = __riscv_vfmul(f1, scale_recip(vfrec_finite(f2, vl), scale, vl), vl);
     return __riscv_vfncvt_x(res, vl);
 }
 template <> inline
 vuint16m2_t div_sat(const vuint16m2_t &v1, const vuint16m2_t &v2, const float scale, const int vl) {
     auto f1 = __riscv_vfwcvt_f(v1, vl);
     auto f2 = __riscv_vfwcvt_f(v2, vl);
-    auto res = __riscv_vfmul(f1, __riscv_vfmul(common::__riscv_vfrec(f2, vl), scale, vl), vl);
+    auto res = __riscv_vfmul(f1, scale_recip(vfrec_finite(f2, vl), scale, vl), vl);
     return __riscv_vfncvt_xu(res, vl);
 }
 template <> inline
 vint32m4_t div_sat(const vint32m4_t &v1, const vint32m4_t &v2, const float scale, const int vl) {
     auto f1 = __riscv_vfcvt_f(v1, vl);
     auto f2 = __riscv_vfcvt_f(v2, vl);
-    auto res = __riscv_vfmul(f1, __riscv_vfmul(common::__riscv_vfrec(f2, vl), scale, vl), vl);
+    auto res = __riscv_vfmul(f1, __riscv_vfmul(vfrec_finite(f2, vl), scale, vl), vl);
     return __riscv_vfcvt_x(res, vl);
 }
 template <> inline
 vuint32m4_t div_sat(const vuint32m4_t &v1, const vuint32m4_t &v2, const float scale, const int vl) {
     auto f1 = __riscv_vfcvt_f(v1, vl);
     auto f2 = __riscv_vfcvt_f(v2, vl);
-    auto res = __riscv_vfmul(f1, __riscv_vfmul(common::__riscv_vfrec(f2, vl), scale, vl), vl);
+    auto res = __riscv_vfmul(f1, __riscv_vfmul(vfrec_finite(f2, vl), scale, vl), vl);
     return __riscv_vfcvt_xu(res, vl);
 }
 
@@ -77,25 +89,25 @@ VT recip_sat(const VT &v, const float scale, const int vl) {
 template <> inline
 vint16m2_t recip_sat(const vint16m2_t &v, const float scale, const int vl) {
     auto f = __riscv_vfwcvt_f(v, vl);
-    auto res = __riscv_vfmul(common::__riscv_vfrec(f, vl), scale, vl);
+    auto res = scale_recip(vfrec_finite(f, vl), scale, vl);
     return __riscv_vfncvt_x(res, vl);
 }
 template <> inline
 vuint16m2_t recip_sat(const vuint16m2_t &v, const float scale, const int vl) {
     auto f = __riscv_vfwcvt_f(v, vl);
-    auto res = __riscv_vfmul(common::__riscv_vfrec(f, vl), scale, vl);
+    auto res = scale_recip(vfrec_finite(f, vl), scale, vl);
     return __riscv_vfncvt_xu(res, vl);
 }
 template <> inline
 vint32m4_t recip_sat(const vint32m4_t &v, const float scale, const int vl) {
     auto f = __riscv_vfcvt_f(v, vl);
-    auto res = __riscv_vfmul(common::__riscv_vfrec(f, vl), scale, vl);
+    auto res = __riscv_vfmul(vfrec_finite(f, vl), scale, vl);
     return __riscv_vfcvt_x(res, vl);
 }
 template <> inline
 vuint32m4_t recip_sat(const vuint32m4_t &v, const float scale, const int vl) {
     auto f = __riscv_vfcvt_f(v, vl);
-    auto res = __riscv_vfmul(common::__riscv_vfrec(f, vl), scale, vl);
+    auto res = __riscv_vfmul(vfrec_finite(f, vl), scale, vl);
     return __riscv_vfcvt_xu(res, vl);
 }
 
@@ -126,7 +138,8 @@ int div(const ST *src1, size_t step1, const ST *src2, size_t step2,
             auto v2 = vle(src2_h + w, vl);
 
             auto mask = __riscv_vmseq(v2, 0, vl);
-            vse(dst_h + w, __riscv_vmerge(div_sat(v1, v2, scale, vl), 0, mask, vl), vl);
+            auto nonzero_v2 = __riscv_vmerge(v2, 1, mask, vl);
+            vse(dst_h + w, __riscv_vmerge(div_sat(v1, nonzero_v2, scale, vl), 0, mask, vl), vl);
         }
     }
 
@@ -203,7 +216,8 @@ int recip(const ST *src_data, size_t src_step, ST *dst_data, size_t dst_step,
             auto v = vle(src_h + w, vl);
 
             auto mask = __riscv_vmseq(v, 0, vl);
-            vse(dst_h + w, __riscv_vmerge(recip_sat(v, scale, vl), 0, mask, vl), vl);
+            auto nonzero_v = __riscv_vmerge(v, 1, mask, vl);
+            vse(dst_h + w, __riscv_vmerge(recip_sat(nonzero_v, scale, vl), 0, mask, vl), vl);
         }
     }
 

@@ -78,17 +78,28 @@ static inline double dotProd_16u(const ushort *a, const ushort *b, int len) {
     while (i < len) {
         int block_size = std::min(block_size0, len - i);
 
-        vuint64m1_t s = __riscv_vmv_v_x_u64m1(0, __riscv_vsetvlmax_e64m1());
+        int vlmax = __riscv_vsetvlmax_e16m4();
+        vuint64m1_t s0 = __riscv_vmv_v_x_u64m1(0, __riscv_vsetvlmax_e64m1());
+        vuint64m1_t s1 = s0;
+        int j = 0;
+        for (; j <= block_size - vlmax * 2; j += vlmax * 2) {
+            auto va = __riscv_vle16_v_u16m4(a + j, vlmax);
+            auto vb = __riscv_vle16_v_u16m4(b + j, vlmax);
+            s0 = __riscv_vwredsumu(__riscv_vwmulu(va, vb, vlmax), s0, vlmax);
+            va = __riscv_vle16_v_u16m4(a + j + vlmax, vlmax);
+            vb = __riscv_vle16_v_u16m4(b + j + vlmax, vlmax);
+            s1 = __riscv_vwredsumu(__riscv_vwmulu(va, vb, vlmax), s1, vlmax);
+        }
         int vl;
-        for (int j = 0; j < block_size; j += vl) {
+        for (; j < block_size; j += vl) {
             vl = __riscv_vsetvl_e16m4(block_size - j);
 
             auto va = __riscv_vle16_v_u16m4(a + j, vl);
             auto vb = __riscv_vle16_v_u16m4(b + j, vl);
 
-            s = __riscv_vwredsumu(__riscv_vwmulu(va, vb, vl), s, vl);
+            s0 = __riscv_vwredsumu(__riscv_vwmulu(va, vb, vl), s0, vl);
         }
-        r += (double)__riscv_vmv_x(s);
+        r += (double)__riscv_vmv_x(s0) + (double)__riscv_vmv_x(s1);
 
         i += block_size;
         a += block_size;
@@ -106,17 +117,28 @@ static inline double dotProd_16s(const short *a, const short *b, int len) {
     while (i < len) {
         int block_size = std::min(block_size0, len - i);
 
-        vint64m1_t s = __riscv_vmv_v_x_i64m1(0, __riscv_vsetvlmax_e64m1());
+        int vlmax = __riscv_vsetvlmax_e16m4();
+        vint64m1_t s0 = __riscv_vmv_v_x_i64m1(0, __riscv_vsetvlmax_e64m1());
+        vint64m1_t s1 = s0;
+        int j = 0;
+        for (; j <= block_size - vlmax * 2; j += vlmax * 2) {
+            auto va = __riscv_vle16_v_i16m4(a + j, vlmax);
+            auto vb = __riscv_vle16_v_i16m4(b + j, vlmax);
+            s0 = __riscv_vwredsum(__riscv_vwmul(va, vb, vlmax), s0, vlmax);
+            va = __riscv_vle16_v_i16m4(a + j + vlmax, vlmax);
+            vb = __riscv_vle16_v_i16m4(b + j + vlmax, vlmax);
+            s1 = __riscv_vwredsum(__riscv_vwmul(va, vb, vlmax), s1, vlmax);
+        }
         int vl;
-        for (int j = 0; j < block_size; j += vl) {
+        for (; j < block_size; j += vl) {
             vl = __riscv_vsetvl_e16m4(block_size - j);
 
             auto va = __riscv_vle16_v_i16m4(a + j, vl);
             auto vb = __riscv_vle16_v_i16m4(b + j, vl);
 
-            s = __riscv_vwredsum(__riscv_vwmul(va, vb, vl), s, vl);
+            s0 = __riscv_vwredsum(__riscv_vwmul(va, vb, vl), s0, vl);
         }
-        r += (double)__riscv_vmv_x(s);
+        r += (double)__riscv_vmv_x(s0) + (double)__riscv_vmv_x(s1);
 
         i += block_size;
         a += block_size;
@@ -127,42 +149,82 @@ static inline double dotProd_16s(const short *a, const short *b, int len) {
 }
 
 static inline double dotProd_32s(const int *a, const int *b, int len) {
-    double r = 0;
-
-    vfloat64m8_t s = __riscv_vfmv_v_f_f64m8(0.f, __riscv_vsetvlmax_e64m8());
-    int vl;
-    for (int j = 0; j < len; j += vl) {
-        vl = __riscv_vsetvl_e32m4(len - j);
-
-        auto va = __riscv_vle32_v_i32m4(a + j, vl);
-        auto vb = __riscv_vle32_v_i32m4(b + j, vl);
-
-        s = __riscv_vfadd_vv_f64m8_tu(s, s, __riscv_vfcvt_f(__riscv_vwmul(va, vb, vl), vl), vl);
+    int vlmax = __riscv_vsetvlmax_e32m1();
+    vfloat64m2_t s0 = __riscv_vfmv_v_f_f64m2(0., vlmax);
+    vfloat64m2_t s1 = __riscv_vfmv_v_f_f64m2(0., vlmax);
+    vfloat64m2_t s2 = __riscv_vfmv_v_f_f64m2(0., vlmax);
+    vfloat64m2_t s3 = __riscv_vfmv_v_f_f64m2(0., vlmax);
+    int j = 0;
+    for (; j <= len - vlmax * 4; j += vlmax * 4) {
+        auto va = __riscv_vle32_v_i32m1(a + j, vlmax);
+        auto vb = __riscv_vle32_v_i32m1(b + j, vlmax);
+        s0 = __riscv_vfadd(s0, __riscv_vfcvt_f(__riscv_vwmul(va, vb, vlmax), vlmax), vlmax);
+        va = __riscv_vle32_v_i32m1(a + j + vlmax, vlmax);
+        vb = __riscv_vle32_v_i32m1(b + j + vlmax, vlmax);
+        s1 = __riscv_vfadd(s1, __riscv_vfcvt_f(__riscv_vwmul(va, vb, vlmax), vlmax), vlmax);
+        va = __riscv_vle32_v_i32m1(a + j + vlmax * 2, vlmax);
+        vb = __riscv_vle32_v_i32m1(b + j + vlmax * 2, vlmax);
+        s2 = __riscv_vfadd(s2, __riscv_vfcvt_f(__riscv_vwmul(va, vb, vlmax), vlmax), vlmax);
+        va = __riscv_vle32_v_i32m1(a + j + vlmax * 3, vlmax);
+        vb = __riscv_vle32_v_i32m1(b + j + vlmax * 3, vlmax);
+        s3 = __riscv_vfadd(s3, __riscv_vfcvt_f(__riscv_vwmul(va, vb, vlmax), vlmax), vlmax);
     }
-    r = __riscv_vfmv_f(__riscv_vfredosum(s, __riscv_vfmv_v_f_f64m1(0.f, __riscv_vsetvlmax_e64m1()), __riscv_vsetvlmax_e64m8()));
+    int vl;
+    for (; j < len; j += vl) {
+        vl = __riscv_vsetvl_e32m1(len - j);
 
-    return r;
+        auto va = __riscv_vle32_v_i32m1(a + j, vl);
+        auto vb = __riscv_vle32_v_i32m1(b + j, vl);
+
+        s0 = __riscv_vfadd_vv_f64m2_tu(s0, s0, __riscv_vfcvt_f(__riscv_vwmul(va, vb, vl), vl), vl);
+    }
+    s0 = __riscv_vfadd(s0, s1, vlmax);
+    s2 = __riscv_vfadd(s2, s3, vlmax);
+    s0 = __riscv_vfadd(s0, s2, vlmax);
+    return __riscv_vfmv_f(__riscv_vfredosum(s0, __riscv_vfmv_v_f_f64m1(0., __riscv_vsetvlmax_e64m1()), vlmax));
 }
 
 static inline double dotProd_32f(const float *a, const float *b, int len) {
-    constexpr int block_size0 = (1 << 11);
+    constexpr int block_size0 = (1 << 13);
 
     double r = 0.f;
     int i = 0;
     while (i < len) {
         int block_size = std::min(block_size0, len - i);
 
-        vfloat32m4_t s = __riscv_vfmv_v_f_f32m4(0.f, __riscv_vsetvlmax_e32m4());
-        int vl;
-        for (int j = 0; j < block_size; j += vl) {
-            vl = __riscv_vsetvl_e32m4(block_size - j);
-
-            auto va = __riscv_vle32_v_f32m4(a + j, vl);
-            auto vb = __riscv_vle32_v_f32m4(b + j, vl);
-
-            s = __riscv_vfmacc_vv_f32m4_tu(s, va, vb, vl);
+        int vlmax = __riscv_vsetvlmax_e32m2();
+        vfloat32m2_t s0 = __riscv_vfmv_v_f_f32m2(0.f, vlmax);
+        vfloat32m2_t s1 = __riscv_vfmv_v_f_f32m2(0.f, vlmax);
+        vfloat32m2_t s2 = __riscv_vfmv_v_f_f32m2(0.f, vlmax);
+        vfloat32m2_t s3 = __riscv_vfmv_v_f_f32m2(0.f, vlmax);
+        int j = 0;
+        for (; j <= block_size - vlmax * 4; j += vlmax * 4) {
+            auto va = __riscv_vle32_v_f32m2(a + j, vlmax);
+            auto vb = __riscv_vle32_v_f32m2(b + j, vlmax);
+            s0 = __riscv_vfmacc(s0, va, vb, vlmax);
+            va = __riscv_vle32_v_f32m2(a + j + vlmax, vlmax);
+            vb = __riscv_vle32_v_f32m2(b + j + vlmax, vlmax);
+            s1 = __riscv_vfmacc(s1, va, vb, vlmax);
+            va = __riscv_vle32_v_f32m2(a + j + vlmax * 2, vlmax);
+            vb = __riscv_vle32_v_f32m2(b + j + vlmax * 2, vlmax);
+            s2 = __riscv_vfmacc(s2, va, vb, vlmax);
+            va = __riscv_vle32_v_f32m2(a + j + vlmax * 3, vlmax);
+            vb = __riscv_vle32_v_f32m2(b + j + vlmax * 3, vlmax);
+            s3 = __riscv_vfmacc(s3, va, vb, vlmax);
         }
-        r += (double)__riscv_vfmv_f(__riscv_vfredusum(s, __riscv_vfmv_v_f_f32m1(0.f, __riscv_vsetvlmax_e32m1()), __riscv_vsetvlmax_e32m4()));
+        int vl;
+        for (; j < block_size; j += vl) {
+            vl = __riscv_vsetvl_e32m2(block_size - j);
+
+            auto va = __riscv_vle32_v_f32m2(a + j, vl);
+            auto vb = __riscv_vle32_v_f32m2(b + j, vl);
+
+            s0 = __riscv_vfmacc_vv_f32m2_tu(s0, va, vb, vl);
+        }
+        s0 = __riscv_vfadd(s0, s1, vlmax);
+        s2 = __riscv_vfadd(s2, s3, vlmax);
+        s0 = __riscv_vfadd(s0, s2, vlmax);
+        r += (double)__riscv_vfmv_f(__riscv_vfredusum(s0, __riscv_vfmv_v_f_f32m1(0.f, __riscv_vsetvlmax_e32m1()), vlmax));
 
         i += block_size;
         a += block_size;
@@ -170,6 +232,40 @@ static inline double dotProd_32f(const float *a, const float *b, int len) {
     }
 
     return r;
+}
+
+static inline double dotProd_64f(const double *a, const double *b, int len) {
+    int vlmax = __riscv_vsetvlmax_e64m2();
+    vfloat64m2_t s0 = __riscv_vfmv_v_f_f64m2(0., vlmax);
+    vfloat64m2_t s1 = __riscv_vfmv_v_f_f64m2(0., vlmax);
+    vfloat64m2_t s2 = __riscv_vfmv_v_f_f64m2(0., vlmax);
+    vfloat64m2_t s3 = __riscv_vfmv_v_f_f64m2(0., vlmax);
+    int j = 0;
+    for (; j <= len - vlmax * 4; j += vlmax * 4) {
+        auto va = __riscv_vle64_v_f64m2(a + j, vlmax);
+        auto vb = __riscv_vle64_v_f64m2(b + j, vlmax);
+        s0 = __riscv_vfmacc(s0, va, vb, vlmax);
+        va = __riscv_vle64_v_f64m2(a + j + vlmax, vlmax);
+        vb = __riscv_vle64_v_f64m2(b + j + vlmax, vlmax);
+        s1 = __riscv_vfmacc(s1, va, vb, vlmax);
+        va = __riscv_vle64_v_f64m2(a + j + vlmax * 2, vlmax);
+        vb = __riscv_vle64_v_f64m2(b + j + vlmax * 2, vlmax);
+        s2 = __riscv_vfmacc(s2, va, vb, vlmax);
+        va = __riscv_vle64_v_f64m2(a + j + vlmax * 3, vlmax);
+        vb = __riscv_vle64_v_f64m2(b + j + vlmax * 3, vlmax);
+        s3 = __riscv_vfmacc(s3, va, vb, vlmax);
+    }
+    int vl;
+    for (; j < len; j += vl) {
+        vl = __riscv_vsetvl_e64m2(len - j);
+        auto va = __riscv_vle64_v_f64m2(a + j, vl);
+        auto vb = __riscv_vle64_v_f64m2(b + j, vl);
+        s0 = __riscv_vfmacc_vv_f64m2_tu(s0, va, vb, vl);
+    }
+    s0 = __riscv_vfadd(s0, s1, vlmax);
+    s2 = __riscv_vfadd(s2, s3, vlmax);
+    s0 = __riscv_vfadd(s0, s2, vlmax);
+    return __riscv_vfmv_f(__riscv_vfredusum(s0, __riscv_vfmv_v_f_f64m1(0., __riscv_vsetvlmax_e64m1()), vlmax));
 }
 
 } // anonymous
@@ -183,7 +279,7 @@ int dotprod(const uchar *a_data, size_t a_step, const uchar *b_data, size_t b_st
         (DotProdFunc)dotProd_8u,  (DotProdFunc)dotProd_8s,
         (DotProdFunc)dotProd_16u, (DotProdFunc)dotProd_16s,
         (DotProdFunc)dotProd_32s, (DotProdFunc)dotProd_32f,
-        nullptr, nullptr
+        (DotProdFunc)dotProd_64f, nullptr
     };
     DotProdFunc func = dotprod_tab[depth];
     if (func == nullptr) {
